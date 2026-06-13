@@ -13,3 +13,6 @@ dist/
 # build artifacts
 next-env.d.ts
 *.tsbuildinfo
+
+# engine cache (generated)
+.cache/
