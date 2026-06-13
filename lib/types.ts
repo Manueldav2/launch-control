@@ -44,7 +44,7 @@ export interface WeekInputs {
   website: string; // the nonprofit / brand site to research and stay on-brand to
   eventWeekday?: string; // when the headline event happens (default "Saturday")
   // OPTIONAL peer/competitor profile URLs (X / LinkedIn / Instagram) to mine for
-  // the CTA + hook patterns that actually win. Requires BRIGHTDATA_API_TOKEN;
+  // the CTA + hook patterns that actually win. Requires BRIGHT_DATA_API_KEY;
   // ignored (and the engine behaves exactly as before) when unset.
   competitors?: string[];
 }
