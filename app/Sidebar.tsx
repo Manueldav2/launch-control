@@ -98,7 +98,7 @@ export default function Sidebar() {
         </div>
         <div style={{ marginTop: "auto", padding: "12px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
           <RailBtn onClick={() => setSettings(true)} title="Settings"><Ic name="gear" size={17} /></RailBtn>
-          <span title="Myles David" style={{ width: 30, height: 30, borderRadius: 99, background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)" }}>MD</span>
+          <span title="Manuel David" style={{ width: 30, height: 30, borderRadius: 99, background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)" }}>MD</span>
         </div>
         {settings && <SettingsModal onClose={() => setSettings(false)} mini={mini} setMini={setMini} reduce={reduce} setReduce={setReduce} onClear={clearData} />}
       </aside>
@@ -211,7 +211,7 @@ export default function Sidebar() {
       <div style={{ borderTop: "1px solid var(--border)", padding: "11px 13px", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ width: 30, height: 30, borderRadius: 99, flex: "0 0 auto", background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)" }}>MD</span>
         <div style={{ lineHeight: 1.25, flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Myles David</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Manuel David</div>
           <div style={{ fontSize: 11.5, color: "var(--faint)" }}>Built with Claude · Opus 4.8</div>
         </div>
         <button onClick={() => setSettings(true)} aria-label="Settings" title="Settings"
@@ -283,7 +283,7 @@ function SettingsModal({ onClose, mini, setMini, reduce, setReduce, onClear }:
         <div style={{ display: "flex", alignItems: "center", gap: 11, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
           <span style={{ width: 32, height: 32, borderRadius: 99, background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>MD</span>
           <div style={{ lineHeight: 1.3 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>Myles David</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>Manuel David</div>
             <div style={{ fontSize: 12, color: "var(--faint)" }}>Paradigm Outreach · Built with Claude Opus 4.8</div>
           </div>
         </div>
