@@ -3,7 +3,9 @@
 // content playbook for this CTA. The plan + media prompts consume both, so the
 // week is grounded in their brand and in what actually performs.
 import { ask, extractJson } from "./llm";
+import { PLATFORMS } from "./types";
 import type { BrandContext } from "./types";
+import { scrapeCompetitorPosts, brightDataEnabled } from "./bright-data";
 
 const FETCH_HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 const HEX = /#([0-9a-fA-F]{6})\b/g;
@@ -130,6 +132,58 @@ export async function winningPatterns(goal: string, cta: string, apiKey?: string
         "- For UGC/motion video: the shape of a clip that drives turnout (first 2 seconds, who's on camera, the ask)\n" +
         "- The single biggest mistake cause campaigns make here\n" +
         "Plain, prescriptive bullets. No fluff, no AI-tells.",
+    })).trim();
+  } catch { return ""; }
+}
+
+// Mine what high-engagement PEERS are actually doing for this kind of campaign,
+// distilled into a short brief the planner designs against. This is the real-data
+// complement to winningPatterns(): where that distills general instincts, this
+// grounds the advice in scraped competitor posts ranked by engagement.
+//
+// OPTIONAL and fully backward-compatible: with no Bright Data token (or no
+// competitors supplied, or a scrape failure) it returns "" and generation runs
+// exactly as before. We scrape every platform for every competitor concurrently,
+// take the top-engagement posts, and let Claude extract the CTA + hook patterns
+// the winners share — strictly from the posts, no fabricated stats.
+export async function competitorIntel(
+  goal: string,
+  competitors: string[],
+  apiKey?: string,
+): Promise<string> {
+  if (!brightDataEnabled() || !competitors?.length) return "";
+
+  const batches = await Promise.all(
+    PLATFORMS.map((p) => scrapeCompetitorPosts(p, competitors, 15)),
+  );
+  const top = batches
+    .flat()
+    .sort((a, b) => (b.likes + b.comments + b.shares) - (a.likes + a.comments + a.shares))
+    .slice(0, 24);
+  if (!top.length) return "";
+
+  const corpus = top
+    .map((p) =>
+      `[${p.platform}] ${p.likes}♥ ${p.comments}💬 ${p.shares}↗ — ` +
+      p.text.replace(/\s+/g, " ").slice(0, 280))
+    .join("\n");
+
+  try {
+    return (await ask({
+      maxTokens: 500,
+      apiKey,
+      system:
+        "You analyze REAL competitor social posts (with engagement counts) and " +
+        "extract only what the data shows — no generic advice, no fabricated stats.",
+      user:
+        `Campaign goal: ${goal}\n\n` +
+        "These are real, recent competitor/peer posts ranked by engagement " +
+        "(♥ likes, 💬 comments, ↗ shares):\n" +
+        `${corpus}\n\n` +
+        "In <=150 words, extract the CTA + hook patterns the HIGHEST-engagement " +
+        "posts share (call out per-platform differences), and the specific phrasings " +
+        "worth emulating. Prescriptive bullets, grounded in these posts only. " +
+        "Never instruct copying any post verbatim.",
     })).trim();
   } catch { return ""; }
 }

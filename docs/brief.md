@@ -41,17 +41,36 @@ raw site HTML, **weather-aware** event decisions, and a **fabrication-grounding*
 rule that keeps the copy honest (no invented numbers or quotes). The self-grade is
 the product surface, not a hidden step.
 
-## Orchestration — repeatable and model-verifiable
-"Done" is graded by the model, no human:
-- `scripts/verify.mjs` hits the live URL and grades the whole system against
-  `docs/rubric.md` (deployment up, 4 channels connectable, a 7-day week that
-  self-grades green, brand researched, copy localized, zero AI-tells, weather
-  attached, media renders + persists, routing correct). Exit 0 = accepted.
-- It defaults to a **fresh problem** (a Habitat home build in Atlanta), so a green
-  run is evidence the engine generalizes, and any team can rerun it tomorrow on a
-  new problem: `node scripts/verify.mjs --goal "..." --cta "..." --website "..." --location "..."`.
-- The media create→review→regenerate loop has its own end-to-end check:
-  `node scripts/selftest-media-pipeline.mjs`.
-- Clean lane split: **creation** (plan, write, render, route, publish) and
-  **review** (claim, judge, regenerate) meet at one contract — a `pending_review`
-  asset row plus three REST calls, so either side is swappable.
+## What "done" means — verifiable by the model, no human
+"Done" is graded by the model, not a human — `scripts/verify.mjs`, one exit code,
+in two machine-graded layers:
+
+1. **Rubric tests (always, offline, no key)** — every `lib/*.test.ts` asserts
+   `docs/rubric.md` (copy checks #1–6 + visual V0–V3) plus the drift-guard that
+   keeps doc and code in lockstep. Bare `node scripts/verify.mjs` runs just this:
+   the zero-setup proof CI runs on every push.
+2. **Live acceptance (opt-in: `--url <base>` or `--live`)** — grades the whole
+   running system against `rubric.md` as hard binaries: deployment up, 4 channels
+   connectable, the sign-in gate, a 7-day week that self-grades green (brand
+   researched, copy localized, zero AI-tells), weather attached, media renders +
+   persists, routing correct. Exit 0 = accepted.
+
+`rubric.md` is the single contract: the critic enforces it, the tests prove it,
+`verify.mjs` checks it.
+
+## Rerun it on any problem tomorrow — one command
+Live acceptance defaults to a **fresh problem** (a Habitat home build in Atlanta),
+so a green run is evidence the engine generalizes — nothing is cleanup-specific.
+Any team reruns it tomorrow on a new campaign by swapping the inputs:
+```
+node scripts/verify.mjs --live --goal "..." --cta "..." --website "https://..." --location "..."
+```
+The media create→review→regenerate loop has its own end-to-end check:
+`node scripts/selftest-media-pipeline.mjs`.
+
+## Orchestration in one breath
+One planner → one critic loop (grade → fix → re-grade, every slot in parallel) →
+one rubric (`rubric.md`) → one done-check (`verify.mjs`). Clean lane split:
+**creation** (plan, write, render, route, publish) and **review** (claim, judge,
+regenerate) meet at one contract — a `pending_review` asset row plus three REST
+calls, so either side is swappable.

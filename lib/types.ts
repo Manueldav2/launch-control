@@ -1,4 +1,5 @@
 // The contract for the whole engine. The week plan is the core artifact.
+import type { VisualVerdict } from "./visual-critic";
 
 export type Platform = "x" | "linkedin" | "instagram";
 export const PLATFORMS: Platform[] = ["x", "linkedin", "instagram"];
@@ -19,6 +20,8 @@ export interface ContentSlot {
   mediaUrl?: string;
   // Critic verdict, set by the self-grading pass.
   grade?: SlotGrade;
+  // Visual critic verdict for the rendered media (set by the optional visual pass).
+  visualGrade?: VisualVerdict;
 }
 
 export interface SlotGrade {
@@ -45,6 +48,10 @@ export interface WeekInputs {
   cta: string; // the overall call to action
   website: string; // the nonprofit / brand site to research and stay on-brand to
   eventWeekday?: string; // when the headline event happens (default "Saturday")
+  // OPTIONAL peer/competitor profile URLs (X / LinkedIn / Instagram) to mine for
+  // the CTA + hook patterns that actually win. Requires BRIGHT_DATA_API_KEY;
+  // ignored (and the engine behaves exactly as before) when unset.
+  competitors?: string[];
   // The in-person event location ("Ocean Beach, San Francisco"). Empty or "NA"
   // means there is no physical place — the CTA points to the website instead.
   location?: string;
@@ -97,6 +104,7 @@ export interface WeekPlan {
   inputs: WeekInputs;
   brand: BrandContext;
   playbook?: string; // the researched "what wins" intel that shaped the plan
+  competitorIntel?: string; // real peer CTA/hook patterns mined via Bright Data (optional)
   days: DayPlan[];
   weather?: WeatherWatch | null; // set for go-to-place events
   luma?: LumaEvent | null;       // set once a Luma event is created

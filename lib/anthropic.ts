@@ -4,7 +4,7 @@
 import type { WeekInputs, WeekPlan, DayPlan, ContentSlot, BrandContext } from "./types";
 import { PLATFORMS, isEventMode } from "./types";
 import { claude, MODEL, extractJson } from "./llm";
-import { researchBrand, winningPatterns } from "./research";
+import { researchBrand, winningPatterns, competitorIntel } from "./research";
 import { assessEventWeather } from "./weather";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 
@@ -21,7 +21,7 @@ Every day shares ONE call to action across all platforms. Each platform aims at 
 distinct reaction. You design to what WINS — the playbook below is real
 performance intel; follow it.`;
 
-function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string): string {
+function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string, competitorIntel: string): string {
   const eventDay = inputs.eventWeekday || "Saturday";
   const event = isEventMode(inputs);
   const place = (inputs.location || "").trim();
@@ -57,6 +57,9 @@ ${brand.summary ? `- Site context: ${brand.summary.slice(0, 500)}` : ""}
 
 WINNING PLAYBOOK (what actually performs for this CTA — design to this):
 ${playbook || "(use proven cause-campaign instincts: specific human hooks, the demonstrable moment, one clear ask)"}
+${competitorIntel ? `
+REAL COMPETITOR INTEL (CTA + hook patterns mined from high-engagement peer posts — emulate these patterns, never copy any post verbatim):
+${competitorIntel}` : ""}
 
 Build a 7-day plan (Monday..Sunday). The week is a story that crescendos to the
 ${eventDay} event. For EACH day give: a single shared "cta" for that day, a one-line
@@ -82,16 +85,22 @@ Return ONLY JSON, no prose:
 }
 
 export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
-  const key = cacheKey(["week", inputs, MODEL, "v4-grounded"]);
+  // v5 = competitor intel (HEAD) + weather grounding (main) both in the plan, so
+  // the key is bumped to invalidate any cache entry that predates either field.
+  const key = cacheKey(["week", inputs, MODEL, "v5-competitors-grounded"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
   const event = isEventMode(inputs);
-  // Research the brand + what wins + (for in-person events) the forecast for the
-  // event day — all concurrently, since none depend on each other.
-  const [brand, playbook, weather] = await Promise.all([
+  // Research the brand, the general playbook, (optionally) real competitor intel,
+  // and (for in-person events) the forecast for the event day — all concurrently,
+  // since each feeds the plan independently. The competitor pass is a no-op
+  // returning "" unless Bright Data is configured AND inputs.competitors were
+  // supplied, so cost/latency stay opt-in.
+  const [brand, playbook, competitors, weather] = await Promise.all([
     researchBrand(inputs.website, apiKey),
     winningPatterns(inputs.goal, inputs.cta, apiKey),
+    competitorIntel(inputs.goal, inputs.competitors || [], apiKey),
     event ? assessEventWeather(inputs.location!, inputs.eventWeekday || "Saturday") : Promise.resolve(null),
   ]);
 
@@ -99,7 +108,7 @@ export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Pro
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM,
-    messages: [{ role: "user", content: planPrompt(inputs, brand, playbook) }],
+    messages: [{ role: "user", content: planPrompt(inputs, brand, playbook, competitors) }],
   });
   const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
   const data = extractJson(text);
@@ -108,6 +117,7 @@ export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Pro
     inputs,
     brand,                       // the REAL researched brand (colors + logo + voice)
     playbook,
+    competitorIntel: competitors, // real peer CTA intel (empty unless Bright Data + competitors set)
     weather,                     // forecast + recommendation for go-to-place events
     days: (data.days || []).map((d: DayPlan) => ({
       ...d,
