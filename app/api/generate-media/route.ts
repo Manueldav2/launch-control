@@ -78,19 +78,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hand off to the review pipeline: copy bytes to Supabase Storage + enqueue a
-    // pending_review asset the partner's reviewer claims. No DB → no-op, the fal
-    // url is returned as-is.
+    // Visual review + AUTO-REGENERATE: when review is on, Opus LOOKS at the
+    // render; if it fails, we re-render with the critic's concrete fixes folded
+    // into the prompt and re-grade, up to a couple of attempts, keeping the last.
+    // This is the reviewer regenerating bad graphics on its own.
+    let visualGrade: any = null;
+    const autofixTrail: any[] = [];
+    if (review && stillUrl) {
+      const MAX_TRIES = parseInt(process.env.REVIEW_MAX_TRIES || "3", 10); // total render attempts incl. the first
+      let attempt = 0; // 0 = the first render
+      let curPrompt = prompt;
+      visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
+      autofixTrail.push({ try: attempt + 1, pass: visualGrade.pass, issues: visualGrade.issues, notes: visualGrade.notes });
+      // Keep regenerating with the grade + the critic's "how to do better" notes
+      // folded into the prompt until it passes or we hit the try cap.
+      while (!visualGrade.pass && attempt < MAX_TRIES - 1) {
+        attempt++;
+        const fixes = [visualGrade.notes, ...(visualGrade.issues || [])].filter(Boolean).join("; ");
+        curPrompt = `${prompt}\n\nThe previous render was REJECTED by visual review (attempt ${attempt} of ${MAX_TRIES - 1}). Here is exactly what to fix so it passes next time: ${fixes}. Address each point. Keep it on-brand and clean (no garbled text, no artifacts).`;
+        const reRender = () => renderMedia({ contentType, prompt: curPrompt, intent, brandColors: colors, location, imageUrl });
+        try {
+          ({ url, stillUrl } = usingOwnKey ? await runWithKeys({ FAL_KEY: userFalKey }, reRender) : await reRender());
+        } catch { break; }
+        visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
+        autofixTrail.push({ try: attempt + 1, pass: visualGrade.pass, issues: visualGrade.issues, notes: visualGrade.notes });
+      }
+    }
+
+    // Persist the FINAL (best) render + enqueue a pending_review asset for the
+    // partner's reviewer. No DB → no-op, the fal url is returned as-is.
     const queued = await enqueueAsset({
       url, contentType, org: org || userId, platform, day, brand, caption, slot, planId,
       prompt, intent, brandColors: colors, location, posterUrl: stillUrl,
     });
-
-    // Optional inline visual review (the existing review=true hook).
-    let visualGrade = null;
-    if (review && stillUrl) {
-      visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
-    }
 
     return NextResponse.json({
       url: queued.publicUrl,
@@ -100,6 +120,7 @@ export async function POST(req: NextRequest) {
       queued: !!queued.id,
       persisted: queued.persisted,
       visualGrade,
+      autofix: autofixTrail.length ? { attempts: autofixTrail.length - 1, finalPass: !!visualGrade?.pass, trail: autofixTrail } : undefined,
       spentUsd: spentSoFar(),
     });
   } catch (e: any) {
