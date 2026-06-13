@@ -1,5 +1,7 @@
 # Launch Control
 
+[![verify](https://github.com/Manueldav2/launch-control/actions/workflows/verify.yml/badge.svg)](https://github.com/Manueldav2/launch-control/actions/workflows/verify.yml)
+
 **One idea in. A whole week of on-brand launch content out, written, made, and graded by a swarm of Claude agents.**
 
 Built for Claude Build Day. Give it a goal, a call to action, and a nonprofit's
@@ -17,6 +19,28 @@ See [`docs/brief.md`](docs/brief.md) and [`docs/rubric.md`](docs/rubric.md).
   "Done" is verifiable by the model, no human: every slot green + the URL responds.
 - It doesn't stop at content. It **ships and works the comments**.
 - It reruns on any campaign by changing three inputs.
+
+## Orchestration in one breath
+
+```
+one planner → one critic loop (grade → fix → re-grade, every slot in parallel)
+            → one rubric (docs/rubric.md) → one done-check
+```
+
+Two zero-dependency scripts make the orchestration simple, repeatable, and
+verifiable by the model with no human:
+
+```bash
+# rerun the engine on ANY campaign — swap the three inputs
+node scripts/launch.mjs --goal "..." --cta "..." --website "https://..."
+
+# "done" = one command, one exit code: rubric tests + URL 200 + scorecard green
+node scripts/verify.mjs --url <deployed-url> --run --goal "..." --cta "..." --website "..."
+```
+
+`docs/rubric.md` is the single contract — the critic enforces it, the offline test
+suites (`lib/*.test.ts`, no API key) prove it, and `verify.mjs` (+ CI on every
+push) checks it. Rerun on a new problem tomorrow by changing three strings.
 
 ## Run it
 

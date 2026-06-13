@@ -32,3 +32,38 @@ POST /api/generate-week
 { "goal": "...", "cta": "...", "website": "https://..." }
 ```
 A passing response is the acceptance test. Swap the inputs to grade any campaign.
+
+# Visual Rubric — what the visual critic grades every render against
+
+The text rubric above grades the *copy*. This second rubric grades the *media*.
+The visual critic (`critiqueVisual` in `lib/visual-critic.ts`) runs the
+multimodal model over each rendered still/keyframe — an `image`, or the keyframe
+behind a `ugc_video` / `motion_video` — when `review=true` on
+`POST /api/generate-media`. It grades what it SEES, not the prompt. Each check is
+a hard binary.
+
+| # | Check | Pass condition |
+|---|-------|----------------|
+| V0 | Rendered | (Deterministic, no model) the slot produced a usable media URL. `gradeRender` hard-fails an empty/unfetchable render *before* any vision call is spent. |
+| V1 | Matches intent | The render actually shows what the slot's prompt/intent describes (`matchesIntent`). **Hard fail.** |
+| V2 | Clean | No garbled/misspelled text, melted hands/faces, watermark, or obvious AI artifacts (`clean`). **Hard fail.** |
+| V3 | On-brand | Fits the brand palette/feel (`onBrand`). **Advisory** — a strong signal, but not a hard fail: a clean, on-topic render still ships if the palette is only slightly off. |
+
+A render **passes** iff `matchesIntent && clean` (V1 ∧ V2); `onBrand` is reported
+but never blocks. This is exactly the rule in `parseVisualVerdict`.
+
+## How "done" is verified without a human
+1. `POST /api/generate-media { contentType, prompt, review: true, intent, brandColors }`
+   returns `visualGrade: { pass, matchesIntent, onBrand, clean, issues, notes }`.
+2. A render is green when `visualGrade.pass === true`.
+3. The verdict logic is **provable with no API key**: `npx tsx --test
+   lib/visual-critic.test.ts` exercises `parseVisualVerdict` (the pass rule, the
+   fail-closed handling of missing fields, string-boolean tolerance, JSON-in-prose
+   extraction, issue-clamping) and `gradeRender`, and exits non-zero on any
+   regression — the visual analog of `lib/critic.test.ts`.
+
+**Fail-closed by design:** a verdict field the model omits or garbles counts as a
+FAIL, so a broken review can never silently ship a bad image. Only an
+*infrastructure* failure (network / API / unparseable reply) is non-blocking —
+`critiqueVisual` surfaces that as a skipped review so the pipeline never hangs on
+the critic.

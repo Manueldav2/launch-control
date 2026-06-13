@@ -1,4 +1,5 @@
 // The contract for the whole engine. The week plan is the core artifact.
+import type { VisualVerdict } from "./visual-critic";
 
 export type Platform = "x" | "linkedin" | "instagram";
 export const PLATFORMS: Platform[] = ["x", "linkedin", "instagram"];
@@ -19,6 +20,8 @@ export interface ContentSlot {
   mediaUrl?: string;
   // Critic verdict, set by the self-grading pass.
   grade?: SlotGrade;
+  // Visual critic verdict for the rendered media (set by the optional visual pass).
+  visualGrade?: VisualVerdict;
 }
 
 export interface SlotGrade {

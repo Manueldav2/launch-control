@@ -1,0 +1,21 @@
+name: verify
+
+# "Done" is verified by the model with NO human, on every commit: the rubric
+# test suites (docs/rubric.md, enforced by lib/critic.ts + lib/visual-critic.ts)
+# must pass. Keyless and ~fast — this is scripts/verify.mjs gate 1.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Model-verifiable DONE gate (rubric tests, offline, no API key)
+        run: node scripts/verify.mjs

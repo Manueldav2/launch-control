@@ -4,13 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { Ic, Mark, PlatformGlyph } from "./icons";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
+type VisualGrade = { pass: boolean; matchesIntent: boolean; onBrand: boolean; clean: boolean; issues: string[]; notes: string };
 type Slot = {
   platform: string; reaction: string; contentType: string; copy: string;
   mediaPrompt?: string; mediaUrl?: string; grade?: { pass: boolean; failures: string[] };
+  visualGrade?: VisualGrade; // visual critic verdict for the rendered still (set when renderMedia ran)
 };
 type Day = { day: number; weekday: string; cta: string; theme: string; isEventDay: boolean; slots: Slot[] };
 type Plan = { brand: { name: string; voice: string; summary: string; colors: string[] }; days: Day[] };
-type Scorecard = { total: number; passing: number; fixed: number };
+type Scorecard = { total: number; passing: number; fixed: number; mediaPassing?: number; mediaTotal?: number };
 
 // ─── display maps ─────────────────────────────────────────────────────────────
 const TYPE_LABEL: Record<string, string> = {
@@ -41,6 +43,7 @@ export default function Home() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
+  const [reviewMedia, setReviewMedia] = useState(false);
 
   async function generate() {
     if (!goal.trim()) { setErr("Tell the crew what you're trying to accomplish first."); return; }
@@ -48,7 +51,7 @@ export default function Home() {
     try {
       const r = await fetch("/api/generate-week", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal, cta, website }),
+        body: JSON.stringify({ goal, cta, website, renderMedia: reviewMedia }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "launch sequence failed");
@@ -164,6 +167,17 @@ export default function Home() {
                   Opus 4.8
                 </span>
                 <span style={{ fontSize: 12.5, color: "var(--faint)" }}>Strategist &amp; critic</span>
+                <button type="button" onClick={() => setReviewMedia((v) => !v)} aria-pressed={reviewMedia}
+                  title="Also render each media slot's still and grade it with the visual critic (uses your fal key; the critic re-renders failures)"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, cursor: "pointer",
+                    color: reviewMedia ? "var(--clay-deep)" : "var(--muted)",
+                    border: `1px solid ${reviewMedia ? "var(--clay)" : "var(--border)"}`,
+                    borderRadius: 8, padding: "5px 9px", background: reviewMedia ? "var(--clay-bg)" : "transparent",
+                  }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 99, background: reviewMedia ? "var(--go)" : "var(--border-strong)" }} />
+                  Review media
+                </button>
                 <button onClick={generate} disabled={loading} aria-label="Launch" style={{
                   marginLeft: "auto", width: 38, height: 38, borderRadius: 11, border: 0,
                   cursor: loading ? "default" : "pointer",
@@ -300,7 +314,8 @@ function useCountUp(target: number, ms = 700): number {
 
 function ReadinessBoard({ plan, scorecard, onReset }:
   { plan: Plan; scorecard: Scorecard; onReset: () => void }) {
-  const allGo = scorecard.passing === scorecard.total;
+  const mediaAllGo = scorecard.mediaTotal == null || scorecard.mediaPassing === scorecard.mediaTotal;
+  const allGo = scorecard.passing === scorecard.total && mediaAllGo;
   const goCount = useCountUp(scorecard.passing);
   return (
     <section className="rise lg lg-strong" style={{
@@ -318,6 +333,12 @@ function ReadinessBoard({ plan, scorecard, onReset }:
           <p style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 10 }}>
             {scorecard.total} posts graded · {scorecard.fixed} auto-corrected by the critic before launch
           </p>
+          {scorecard.mediaTotal != null && scorecard.mediaTotal > 0 && (
+            <p style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 4 }}>
+              {scorecard.mediaPassing} of {scorecard.mediaTotal} media renders cleared the visual critic
+              <span style={{ color: "var(--faint)" }}> · matches intent, clean, on-brand</span>
+            </p>
+          )}
         </div>
         <button onClick={onReset} style={{
           background: "var(--card)", border: "1px solid var(--border-strong)", color: "var(--text)",
@@ -406,10 +427,21 @@ function SlotCard({ slot, busy, onRender, isVid, eventBg }:
         : <img src={slot.mediaUrl} alt="" style={{ width: "100%", borderRadius: 10, marginTop: 12 }} />)}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 13 }}>
-        {slot.grade && (
-          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: go ? "var(--go)" : "var(--abort)" }}>
-            <span style={{ width: 6, height: 6, borderRadius: 99, background: "currentColor" }} />
-            {go ? "Go" : `No-go · ${slot.grade.failures.slice(0, 2).join(", ")}`}
+        {(slot.grade || slot.visualGrade) && (
+          <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            {slot.grade && (
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: go ? "var(--go)" : "var(--abort)" }}>
+                <span style={{ width: 6, height: 6, borderRadius: 99, background: "currentColor" }} />
+                {go ? "Go" : `No-go · ${slot.grade.failures.slice(0, 2).join(", ")}`}
+              </span>
+            )}
+            {slot.visualGrade && (
+              <span title={slot.visualGrade.notes || (slot.visualGrade.issues || []).join("; ")}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: slot.visualGrade.pass ? "var(--go)" : "var(--abort)" }}>
+                <span style={{ width: 6, height: 6, background: "currentColor", transform: "rotate(45deg)" }} />
+                {slot.visualGrade.pass ? "Visual: clear" : `Visual: ${(slot.visualGrade.issues || [])[0] || "flagged"}`}
+              </span>
+            )}
           </span>
         )}
         {(slot.contentType === "image" || isVid(slot.contentType)) && !slot.mediaUrl && (
@@ -528,6 +560,7 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
 
 // ─── baked-in sample week — full payoff with no API key ─────────────────────────
 const g = (failures: string[] = []) => ({ pass: true, failures });
+const vg = (over: Partial<VisualGrade> = {}): VisualGrade => ({ pass: true, matchesIntent: true, onBrand: true, clean: true, issues: [], notes: "On-brand, clean, on-intent.", ...over });
 const SAMPLE_PLAN: Plan = {
   brand: {
     name: "Surfrider Foundation",
@@ -538,30 +571,30 @@ const SAMPLE_PLAN: Plan = {
   days: [
     { day: 1, weekday: "Monday", theme: "Sound the alarm", cta: "Save the date: Saturday, 9am, Ocean Beach", isEventDay: false, slots: [
       { platform: "x", contentType: "text", reaction: "A number that stops the scroll", copy: "Two tons of plastic came off Ocean Beach last spring. Saturday we go back for the rest. 9am, north lot. Bring a friend.", grade: g() },
-      { platform: "instagram", contentType: "image", reaction: "Makes you feel the stakes", copy: "What one tide leaves behind.", mediaPrompt: "documentary photo of plastic debris on a foggy California beach at dawn, muted tones", grade: g() },
+      { platform: "instagram", contentType: "image", reaction: "Makes you feel the stakes", copy: "What one tide leaves behind.", mediaPrompt: "documentary photo of plastic debris on a foggy California beach at dawn, muted tones", grade: g(), visualGrade: vg() },
     ] },
     { day: 2, weekday: "Tuesday", theme: "Why it matters", cta: "Tag someone who would show up", isEventDay: false, slots: [
       { platform: "linkedin", contentType: "text", reaction: "Reframes a cleanup as the best team ritual", copy: "We give the team one Saturday a month on the sand. It is the only standup where nobody checks their phone. Here is why we keep doing it.", grade: g(["softened a humblebrag"]) },
     ] },
     { day: 3, weekday: "Wednesday", theme: "Proof it works", cta: "Reserve your spot at the link", isEventDay: false, slots: [
       { platform: "x", contentType: "text", reaction: "Turns proof into a dare", copy: "80 volunteers. 3 hours. 1,900 pounds of trash. That was March. April is on you.", grade: g() },
-      { platform: "instagram", contentType: "image", reaction: "The before-and-after gut-punch", copy: "Same 200 yards of coast. Left: 8am. Right: 11am. That is what showing up looks like.", mediaPrompt: "split before-and-after of a littered vs clean beach cove, natural light", grade: g() },
+      { platform: "instagram", contentType: "image", reaction: "The before-and-after gut-punch", copy: "Same 200 yards of coast. Left: 8am. Right: 11am. That is what showing up looks like.", mediaPrompt: "split before-and-after of a littered vs clean beach cove, natural light", grade: g(), visualGrade: vg({ notes: "Cleared on revision 1 — the first render had garbled signage text; the visual critic caught it and re-rendered." }) },
     ] },
     { day: 4, weekday: "Thursday", theme: "Meet the crew", cta: "Sponsor a cleanup (link in bio)", isEventDay: false, slots: [
-      { platform: "instagram", contentType: "ugc_video", reaction: "A face you trust, not a brand", copy: "60 seconds with Dana, who has not missed a cleanup in four years. Ask her why.", mediaPrompt: "handheld vertical interview of a volunteer on a beach, candid, golden hour", grade: g(["cut a cliché opener"]) },
+      { platform: "instagram", contentType: "ugc_video", reaction: "A face you trust, not a brand", copy: "60 seconds with Dana, who has not missed a cleanup in four years. Ask her why.", mediaPrompt: "handheld vertical interview of a volunteer on a beach, candid, golden hour", grade: g(["cut a cliché opener"]), visualGrade: vg() },
       { platform: "linkedin", contentType: "text", reaction: "Gives a sponsor their business case", copy: "Three reasons your company should sponsor a beach cleanup. The third one is recruiting, and it is the one your CFO will care about.", grade: g() },
     ] },
     { day: 5, weekday: "Friday", theme: "Last call", cta: "RSVP for tomorrow", isEventDay: false, slots: [
       { platform: "x", contentType: "text", reaction: "Removes every reason not to come", copy: "Tomorrow. 9am. Ocean Beach, north lot. Gloves and bags are on us. Just show up.", grade: g() },
     ] },
     { day: 6, weekday: "Saturday", theme: "Launch day", cta: "Pull up. North lot, 9am.", isEventDay: true, slots: [
-      { platform: "instagram", contentType: "motion_video", reaction: "The hero film, full volume", copy: "Today is the day. Pull up.", mediaPrompt: "energetic launch-day montage of volunteers arriving at a beach, banners, sunrise", grade: g() },
+      { platform: "instagram", contentType: "motion_video", reaction: "The hero film, full volume", copy: "Today is the day. Pull up.", mediaPrompt: "energetic launch-day montage of volunteers arriving at a beach, banners, sunrise", grade: g(), visualGrade: vg() },
       { platform: "x", contentType: "text", reaction: "Live energy, come now", copy: "Live from Ocean Beach. The crew is here, the coffee is hot, and the coast needs you. Park at the north lot.", grade: g() },
     ] },
     { day: 7, weekday: "Sunday", theme: "The payoff", cta: "Join the next one at the link", isEventDay: false, slots: [
-      { platform: "instagram", contentType: "image", reaction: "The payoff that earns the next ask", copy: "Yesterday, 112 of you showed up. This is what you did.", mediaPrompt: "wide shot of a clean beach and a large group of smiling volunteers holding bags", grade: g() },
+      { platform: "instagram", contentType: "image", reaction: "The payoff that earns the next ask", copy: "Yesterday, 112 of you showed up. This is what you did.", mediaPrompt: "wide shot of a clean beach and a large group of smiling volunteers holding bags", grade: g(), visualGrade: vg() },
       { platform: "linkedin", contentType: "text", reaction: "Gratitude that sets up what is next", copy: "112 people. 2,400 pounds. One clean coastline. Thank you. The next cleanup is the second Saturday of May, and we are already short on gloves.", grade: g() },
     ] },
   ],
 };
-const SAMPLE_SCORE: Scorecard = { total: 12, passing: 12, fixed: 3 };
+const SAMPLE_SCORE: Scorecard = { total: 12, passing: 12, fixed: 3, mediaPassing: 5, mediaTotal: 5 };
