@@ -303,10 +303,8 @@ function ReadinessBoard({ plan, scorecard, onReset }:
   const allGo = scorecard.passing === scorecard.total;
   const goCount = useCountUp(scorecard.passing);
   return (
-    <section className="rise" style={{
-      marginBottom: 22, border: "1px solid var(--border-strong)", borderRadius: 16,
-      padding: "22px 24px", background: "var(--card)",
-      boxShadow: "0 1px 2px rgba(50,45,30,0.04), 0 12px 30px -20px rgba(50,45,30,0.12)",
+    <section className="rise lg lg-strong" style={{
+      marginBottom: 22, borderRadius: 18, padding: "22px 24px",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
         <div>
@@ -464,9 +462,8 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
       background: "rgba(250,249,245,0.72)", backdropFilter: "blur(6px)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
     }}>
-      <div style={{
-        width: "min(560px, 94vw)", border: "1px solid var(--border-strong)", borderRadius: 20,
-        background: "var(--card)", boxShadow: "0 30px 80px -30px rgba(50,45,30,0.3)",
+      <div className="lg lg-strong" style={{
+        width: "min(560px, 94vw)", borderRadius: 22,
         padding: 28, position: "relative", overflow: "hidden",
       }}>
         <span style={{ position: "absolute", top: 0, width: "30%", height: 2, background: "linear-gradient(90deg, transparent, var(--clay), transparent)", animation: "sweep 2.6s linear infinite" }} />
