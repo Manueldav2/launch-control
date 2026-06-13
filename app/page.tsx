@@ -8,6 +8,14 @@ import type { WeatherWatch, LumaEvent } from "./EventControls";
 import { getLumaKey, setLumaKey } from "@/lib/client-luma";
 import { keyHeaders } from "@/lib/client-key";
 import PublishBar from "./PublishBar";
+import AuthBar from "./AuthBar";
+
+// Scorecard derived from a saved plan's per-slot grades (for reopened projects).
+function scoreOf(p: any): Scorecard {
+  let total = 0, passing = 0;
+  for (const d of p?.days || []) for (const s of d.slots || []) { total++; if (s.grade?.pass) passing++; }
+  return { total, passing, fixed: 0 };
+}
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -188,6 +196,7 @@ export default function Home() {
 
   return (
     <main style={{ position: "relative", maxWidth: 820, margin: "0 auto", padding: "0 24px 120px" }}>
+      <AuthBar plan={plan} onLoadProject={(p: any) => { setPlan(p); setScorecard(scoreOf(p)); savePlanLocal(p); if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); }} />
       {loading && <LaunchSequence goal={goal} website={website} />}
 
       {/* ── hero + composer ─────────────────────────────────────────────── */}

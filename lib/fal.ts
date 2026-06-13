@@ -3,6 +3,7 @@
 // by prompt and a process-wide spend ceiling (MAX_VIDEO_SPEND_USD) hard-stops
 // runaway spend during a demo.
 import { cacheGet, cacheSet, cacheKey } from "./cache";
+import { key as reqKey } from "./request-keys";
 
 const BASE = "https://queue.fal.run";
 // Rough per-render cost estimates (USD) for the spend guard.
@@ -10,7 +11,7 @@ const VIDEO_COST = 0.4;
 const IMAGE_COST = 0.01;
 
 function key(): string {
-  const k = process.env.FAL_KEY;
+  const k = reqKey("FAL_KEY");
   if (!k) throw new Error("FAL_KEY is not set");
   return k;
 }

@@ -1,13 +1,14 @@
 // Shared Claude plumbing used by both the creation side (anthropic.ts) and the
 // review side (critic.ts), so each can be owned and edited independently.
 import Anthropic from "@anthropic-ai/sdk";
+import { key as reqKey } from "./request-keys";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 
 // A per-request key (entered in the UI) overrides the env key. Threaded through
 // every call so the app works with no .env — the user just pastes their key.
 export function claude(apiKeyOverride?: string): Anthropic {
-  const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  const apiKey = apiKeyOverride || reqKey("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("No Anthropic API key — add one in the UI or set ANTHROPIC_API_KEY.");
   return new Anthropic({ apiKey });
 }
