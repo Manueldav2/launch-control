@@ -13,7 +13,7 @@ import Link from "next/link";
 import type { WeekPlan, Platform } from "@/lib/types";
 import { loadPlanLocal, DEMO_WEEK } from "../calendar/plan-store";
 import { LumaMark } from "../EventControls";
-import { getLumaKey } from "@/lib/client-luma";
+import { getLumaKey, setLumaKey } from "@/lib/client-luma";
 
 const PLATFORMS: Array<{ p: string; label: string; color: string; glyph: React.ReactNode; blurb: string }> = [
   { p: "x", label: "X", color: "#0f0f0f", blurb: "Timeline · short, punchy, scroll-stopping", glyph: <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.4l13.2 17.3z"/></svg> },
@@ -29,6 +29,7 @@ export default function ChannelsHub() {
   const [conn, setConn] = useState<ConnectState>({ loaded: false, ok: false });
   const [connecting, setConnecting] = useState<string | null>(null);
   const [lumaConnected, setLumaConnected] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     setLumaConnected(!!getLumaKey());
@@ -72,6 +73,27 @@ export default function ChannelsHub() {
         setConnecting(null);
         alert(`Could not start the ${p} connection. Please try again.`);
       });
+  };
+
+  const refreshConn = () => {
+    fetch("/api/connect")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setConn({ accounts: d.accounts || [], connect: d.connect || {}, loaded: true, ok: true }))
+      .catch(() => {});
+  };
+  const disconnect = (p: string) => {
+    if (!window.confirm(`Disconnect ${p}? You can reconnect it anytime.`)) return;
+    setBusy(p);
+    fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: p }) })
+      .then((r) => r.json())
+      .then((d) => { if (!d.ok) throw new Error(d.error || "failed"); refreshConn(); })
+      .catch(() => alert(`Could not disconnect ${p}. Please try again.`))
+      .finally(() => setBusy(null));
+  };
+  const disconnectLuma = () => {
+    if (!window.confirm("Disconnect Luma?")) return;
+    setLumaKey("");
+    setLumaConnected(false);
   };
 
   return (
@@ -163,6 +185,28 @@ export default function ChannelsHub() {
                     {connecting === p ? "Connecting…" : "Connect"}
                   </button>
                 )}
+                {connected && (
+                  <button
+                    type="button"
+                    onClick={() => disconnect(p)}
+                    disabled={busy === p}
+                    title={`Disconnect ${label}`}
+                    style={{
+                      flex: "0 0 auto",
+                      background: "transparent",
+                      border: "1px solid var(--border-strong)",
+                      color: "var(--abort)",
+                      fontWeight: 600,
+                      fontSize: 13.5,
+                      padding: "9px 16px",
+                      borderRadius: 9,
+                      cursor: busy === p ? "wait" : "pointer",
+                      opacity: busy === p ? 0.6 : 1,
+                    }}
+                  >
+                    {busy === p ? "…" : "Disconnect"}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -183,6 +227,12 @@ export default function ChannelsHub() {
         <Link href="/channels/luma" style={{ flex: "0 0 auto", textAlign: "center", textDecoration: "none", background: "var(--clay)", color: "#fff", fontWeight: 600, fontSize: 13.5, padding: "9px 18px", borderRadius: 9 }}>
           Open channel
         </Link>
+        {lumaConnected && (
+          <button type="button" onClick={disconnectLuma} title="Disconnect Luma"
+            style={{ flex: "0 0 auto", background: "transparent", border: "1px solid var(--border-strong)", color: "var(--abort)", fontWeight: 600, fontSize: 13.5, padding: "9px 16px", borderRadius: 9, cursor: "pointer" }}>
+            Disconnect
+          </button>
+        )}
       </div>
 
       <div style={{ marginTop: 22, fontSize: 12.5 }}>
