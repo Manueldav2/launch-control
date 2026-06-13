@@ -14,7 +14,7 @@ const PLATFORM_MAP: Record<string, string> = {
   facebook: "facebook", tiktok: "tiktok",
 };
 // Zernio's platform name -> our channel key (for the UI).
-const PLATFORM_FROM: Record<string, string> = {
+export const PLATFORM_FROM: Record<string, string> = {
   twitter: "x", linkedin: "linkedin", instagram: "instagram",
   facebook: "facebook", tiktok: "tiktok",
 };
@@ -96,6 +96,25 @@ export async function publish(opts: {
   const r = await fetch(`${BASE}/v1/posts`, { method: "POST", headers: headers(), body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`zernio publish ${r.status}: ${await r.text()}`);
   return r.json();
+}
+
+// Posts for an account, optionally filtered by status ("scheduled" | "published").
+// Zernio carries status + scheduledFor on each post, so this is how we surface
+// the upcoming scheduled queue (and how the watcher finds recent live posts).
+export async function listPosts(accountId: string, status?: string): Promise<any[]> {
+  const url = new URL(`${BASE}/v1/posts`);
+  url.searchParams.set("accountId", accountId);
+  if (status) url.searchParams.set("status", status);
+  const r = await fetch(url.toString(), { headers: headers() });
+  if (!r.ok) return [];
+  const j = await r.json();
+  return j.posts || j.data || (Array.isArray(j) ? j : []);
+}
+
+// Cancel a scheduled (or delete a published) post. Powers "unschedule".
+export async function deletePost(postId: string): Promise<boolean> {
+  const r = await fetch(`${BASE}/v1/posts/${encodeURIComponent(postId)}`, { method: "DELETE", headers: headers() });
+  return r.ok;
 }
 
 // Comments on a published post (for the comment-watch + auto-reply).
