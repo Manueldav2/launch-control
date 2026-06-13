@@ -105,7 +105,7 @@ export default function Home() {
     setWeatherResolved(null); setLuma(null);
     try {
       const r = await fetch("/api/generate-week", {
-        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()), ...keyHeaders() },
         body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday }),
       });
       const d = await r.json();

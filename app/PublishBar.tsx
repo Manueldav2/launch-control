@@ -140,9 +140,9 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
         {unrendered.length > 0 && (
           <span style={{ fontSize: 11.5, color: "var(--faint)" }}>Render media first so Instagram + TikTok get the video.</span>
         )}
-        <button onClick={() => { if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); }}
+        <button onClick={() => { if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-keys")); }}
           style={{ background: "transparent", border: 0, color: "var(--clay-deep)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
-          Use your own fal.ai key
+          Use your own keys
         </button>
       </div>
 
