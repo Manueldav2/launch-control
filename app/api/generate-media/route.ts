@@ -85,21 +85,23 @@ export async function POST(req: NextRequest) {
     let visualGrade: any = null;
     const autofixTrail: any[] = [];
     if (review && stillUrl) {
-      const MAX_AUTOFIX = isVideo ? 1 : 2; // video re-renders are pricey, cap lower
-      let attempt = 0;
+      const MAX_TRIES = parseInt(process.env.REVIEW_MAX_TRIES || "3", 10); // total render attempts incl. the first
+      let attempt = 0; // 0 = the first render
       let curPrompt = prompt;
       visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
-      autofixTrail.push({ attempt, pass: visualGrade.pass, issues: visualGrade.issues });
-      while (!visualGrade.pass && attempt < MAX_AUTOFIX) {
+      autofixTrail.push({ try: attempt + 1, pass: visualGrade.pass, issues: visualGrade.issues, notes: visualGrade.notes });
+      // Keep regenerating with the grade + the critic's "how to do better" notes
+      // folded into the prompt until it passes or we hit the try cap.
+      while (!visualGrade.pass && attempt < MAX_TRIES - 1) {
         attempt++;
         const fixes = [visualGrade.notes, ...(visualGrade.issues || [])].filter(Boolean).join("; ");
-        curPrompt = `${prompt}\n\nThe previous render was REJECTED by visual review for: ${fixes}. Fix these specifically. Keep it on-brand and clean (no garbled text or artifacts).`;
+        curPrompt = `${prompt}\n\nThe previous render was REJECTED by visual review (attempt ${attempt} of ${MAX_TRIES - 1}). Here is exactly what to fix so it passes next time: ${fixes}. Address each point. Keep it on-brand and clean (no garbled text, no artifacts).`;
         const reRender = () => renderMedia({ contentType, prompt: curPrompt, intent, brandColors: colors, location, imageUrl });
         try {
           ({ url, stillUrl } = usingOwnKey ? await runWithKeys({ FAL_KEY: userFalKey }, reRender) : await reRender());
         } catch { break; }
         visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
-        autofixTrail.push({ attempt, pass: visualGrade.pass, issues: visualGrade.issues });
+        autofixTrail.push({ try: attempt + 1, pass: visualGrade.pass, issues: visualGrade.issues, notes: visualGrade.notes });
       }
     }
 
