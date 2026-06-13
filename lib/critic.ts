@@ -33,10 +33,11 @@ export function gradeSlot(slot: ContentSlot): SlotGrade {
 
 // LLM rubric checks (#5-6: fabrication + CTA present). Optional layer; returns
 // extra failures to merge with the deterministic ones.
-export async function gradeSlotLLM(slot: ContentSlot, cta: string): Promise<string[]> {
+export async function gradeSlotLLM(slot: ContentSlot, cta: string, apiKey?: string): Promise<string[]> {
   try {
     const out = await ask({
       maxTokens: 60,
+      apiKey,
       user:
         `A ${slot.platform} post. Day's CTA: "${cta}". ` +
         `Answer with a comma list of any that are TRUE, or "ok": ` +
@@ -53,9 +54,10 @@ export async function gradeSlotLLM(slot: ContentSlot, cta: string): Promise<stri
 }
 
 // Rewrite one failing slot's copy (the regenerate half of the self-correct loop).
-export async function fixSlotCopy(slot: ContentSlot, failures: string[]): Promise<string> {
+export async function fixSlotCopy(slot: ContentSlot, failures: string[], apiKey?: string): Promise<string> {
   return (await ask({
     maxTokens: 400,
+    apiKey,
     system:
       "You rewrite social posts to pass review. No em-dashes, no hype words, " +
       "no fabrication. Keep the intent and the CTA. Respect channel limits " +

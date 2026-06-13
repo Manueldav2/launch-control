@@ -4,17 +4,19 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
 
-export function claude(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+// A per-request key (entered in the UI) overrides the env key. Threaded through
+// every call so the app works with no .env — the user just pastes their key.
+export function claude(apiKeyOverride?: string): Anthropic {
+  const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("No Anthropic API key — add one in the UI or set ANTHROPIC_API_KEY.");
   return new Anthropic({ apiKey });
 }
 
 // Convenience: run one prompt, get the text back.
 export async function ask(opts: {
-  system?: string; user: string; maxTokens?: number;
+  system?: string; user: string; maxTokens?: number; apiKey?: string;
 }): Promise<string> {
-  const msg = await claude().messages.create({
+  const msg = await claude(opts.apiKey).messages.create({
     model: MODEL,
     max_tokens: opts.maxTokens ?? 1024,
     ...(opts.system ? { system: opts.system } : {}),
