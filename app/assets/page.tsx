@@ -22,23 +22,8 @@ export default function AssetsPage() {
   const stills = assets.filter((a) => a.contentType === "image").length;
 
   return (
-    <main style={{ position: "relative", zIndex: 2, maxWidth: 1180, margin: "0 auto", padding: "0 24px 120px" }}>
+    <main style={{ position: "relative", zIndex: 2, maxWidth: 1100, margin: "0 auto", padding: "44px 28px 120px" }}>
       <div className="grain" />
-
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "26px 0 30px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ position: "relative", width: 16, height: 16, display: "inline-block" }}>
-            <span style={{ position: "absolute", inset: 0, borderRadius: 99,
-              background: "radial-gradient(circle, var(--ignite-2), var(--ignite) 60%, transparent)",
-              boxShadow: "0 0 14px var(--ignite)", animation: "glowpulse 3s ease-in-out infinite" }} />
-          </span>
-          <span className="mono" style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--muted)" }}>LAUNCH&nbsp;CONTROL</span>
-        </div>
-        <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <Link href="/" className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--faint)", textDecoration: "none" }}>CONSOLE</Link>
-          <span className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--ignite)" }}>ASSETS</span>
-        </nav>
-      </header>
 
       <section className="rise" style={{ marginBottom: 26 }}>
         <p className="eyebrow" style={{ marginBottom: 10 }}>ASSET BAY · GENERATED MEDIA</p>

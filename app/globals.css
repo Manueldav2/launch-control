@@ -106,12 +106,18 @@ body::after {
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
 /* log line entrance */
 @keyframes logline { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
-/* gentle float for hero content tiles */
-@keyframes float1 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-14px) rotate(calc(var(--r,0deg) + 1.5deg)); } }
-@keyframes float2 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(12px) rotate(calc(var(--r,0deg) - 1.5deg)); } }
-@keyframes tilein { from { opacity: 0; transform: translateY(20px) scale(0.9) rotate(var(--r,0deg)); } to { opacity: 1; transform: translateY(0) scale(1) rotate(var(--r,0deg)); } }
+/* edge-masked marquee of sample posts — drifts left, pauses on hover */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 .rise { animation: rise 0.6s cubic-bezier(0.2,0.7,0.2,1) both; }
+
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+.marquee-track { animation: marquee 48s linear infinite; will-change: transform; }
+.marquee-track:hover { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation: none; } }
 
 /* Inputs */
 input, textarea {
@@ -125,3 +131,55 @@ input:focus, textarea:focus { outline: none; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ─── App shell: fixed sidebar + offset content ──────────────────────────── */
+.app-shell { margin-left: 244px; }
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 244px; z-index: 40;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #0c0c11, #08080b);
+  border-right: 1px solid var(--line);
+}
+.sidebar::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(420px 220px at 0% 8%, rgba(255,106,26,0.08), transparent 70%);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 10px;
+  color: var(--muted); text-decoration: none; font-size: 13.5px; font-weight: 500;
+  border: 1px solid transparent; transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.nav-item:hover { background: rgba(255,255,255,0.03); color: var(--fg); }
+.nav-item[data-active="true"] {
+  background: rgba(255,106,26,0.10); color: var(--ember);
+  border-color: rgba(255,106,26,0.28);
+}
+.nav-item[data-active="true"] svg { color: var(--ignite); }
+@media (max-width: 920px) {
+  .app-shell { margin-left: 0; }
+  .sidebar { display: none; }
+}
+
+/* ─── Pixel-grid side blooms (orange, masked) ────────────────────────────── */
+.pixelgrid { position: fixed; top: 0; bottom: 0; width: 360px; z-index: 0; pointer-events: none; overflow: hidden; }
+.pixelgrid[data-side="left"]  { left: 244px; -webkit-mask-image: radial-gradient(ellipse 80% 75% at 0% 42%, #000, transparent 72%); mask-image: radial-gradient(ellipse 80% 75% at 0% 42%, #000, transparent 72%); }
+.pixelgrid[data-side="right"] { right: 0;   -webkit-mask-image: radial-gradient(ellipse 80% 75% at 100% 42%, #000, transparent 72%); mask-image: radial-gradient(ellipse 80% 75% at 100% 42%, #000, transparent 72%); }
+.pixelgrid > i {
+  position: absolute; inset: -28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Crect x='3' y='3' width='24' height='24' rx='6' fill='none' stroke='rgba(255,106,26,0.14)' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 30px 30px;
+}
+.pixelgrid > b {
+  position: absolute; inset: -28px; will-change: opacity;
+  animation: gridglow 4.5s ease-in-out infinite;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect x='3' y='33' width='24' height='24' rx='6' fill='rgba(255,106,26,0.5)'/%3E%3Crect x='63' y='3' width='24' height='24' rx='6' fill='rgba(255,140,66,0.42)'/%3E%3Crect x='33' y='93' width='24' height='24' rx='6' fill='rgba(255,106,26,0.38)'/%3E%3Crect x='93' y='63' width='24' height='24' rx='6' fill='rgba(255,178,122,0.34)'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+}
+.pixelgrid[data-side="right"] > b { animation-delay: 1.6s; }
+@keyframes gridglow { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pixelgrid > b { animation: none; } }
+@media (max-width: 920px) { .pixelgrid[data-side="left"] { left: 0; } }
+
+/* ─── Hero tile cluster (floats ABOVE the headline) ──────────────────────── */
+@keyframes floatA { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-9px) rotate(var(--r,0deg)); } }
+@keyframes dropin { from { opacity: 0; transform: translateY(-18px) rotate(var(--r,0deg)) scale(0.92); } to { opacity: 1; transform: translateY(0) rotate(var(--r,0deg)) scale(1); } }

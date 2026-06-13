@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Space_Mono } from "next/font/google";
 import "./globals.css";
+import Sidebar from "./Sidebar";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <Sidebar />
+        <div className="app-shell">{children}</div>
+      </body>
     </html>
   );
 }

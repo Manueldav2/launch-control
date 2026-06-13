@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import Link from "next/link";
-import { saveAsset } from "@/lib/assets-store";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -26,17 +24,6 @@ function PlatformGlyph({ p }: { p: string }) {
   return <svg viewBox="0 0 24 24" {...c}><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>;
 }
 
-// The crew — the visible swarm. Theater for "a team of agents", and honest: each
-// maps to a real step in the pipeline.
-const CREW = [
-  { id: "strat", role: "STRATEGIST", station: "plans the 7-day arc" },
-  { id: "wx", role: "X WRITER", station: "drafts every X post" },
-  { id: "wli", role: "LINKEDIN WRITER", station: "drafts LinkedIn" },
-  { id: "wig", role: "INSTAGRAM WRITER", station: "drafts Instagram" },
-  { id: "critic", role: "CRITIC", station: "grades + rewrites" },
-  { id: "media", role: "MEDIA", station: "renders film + stills" },
-];
-
 // One-click demo missions — also proves the engine reruns on any campaign.
 const EXAMPLES = [
   { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Sign up at the link to join the cleanup", website: "https://www.surfrider.org" },
@@ -50,6 +37,13 @@ const MISSION_PLACEHOLDERS = [
   "Rally the neighborhood for the park restoration",
 ];
 
+// Posts shown clustered above the headline — a taste of what the crew makes.
+const CLUSTER = [
+  { p: "x", type: "TEXT", txt: "Two tons of plastic. One Saturday. 9am, Ocean Beach.", r: -9, top: 6 },
+  { p: "instagram", type: "LAUNCH FILM", txt: "Today is the day. Pull up to the north lot.", r: 3, top: 0 },
+  { p: "linkedin", type: "TEXT", txt: "The best standup we run has no phones and a lot of sand.", r: 10, top: 8 },
+];
+
 export default function Home() {
   const [goal, setGoal] = useState("");
   const [cta, setCta] = useState("");
@@ -61,17 +55,10 @@ export default function Home() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
-
-  // crew animation cursor while generating
-  useEffect(() => {
-    if (!loading) return;
-    const iv = setInterval(() => setTick((t) => t + 1), 700);
-    return () => clearInterval(iv);
-  }, [loading]);
 
   async function generate() {
-    setErr(""); setLoading(true); setPlan(null); setScorecard(null); setTick(0);
+    if (!goal.trim()) { setErr("Enter a mission objective first."); return; }
+    setErr(""); setLoading(true); setPlan(null); setScorecard(null);
     try {
       const r = await fetch("/api/generate-week", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -82,6 +69,13 @@ export default function Home() {
       setPlan(d.plan); setScorecard(d.scorecard);
     } catch (e: any) { setErr(String(e.message || e)); }
     setLoading(false);
+  }
+
+  function loadSample() {
+    setErr("");
+    setPlan(SAMPLE_PLAN);
+    setScorecard(SAMPLE_SCORE);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function makeMedia(di: number, si: number) {
@@ -99,6 +93,7 @@ export default function Home() {
         const next = structuredClone(plan);
         next.days[di].slots[si].mediaUrl = d.url;
         setPlan(next);
+        const { saveAsset } = await import("@/lib/assets-store");
         saveAsset({ url: d.url, contentType: slot.contentType, platform: slot.platform,
           day: plan.days[di].weekday, brand: plan.brand?.name || "", caption: slot.copy.slice(0, 120) });
       } else setErr(d.error || "render failed");
@@ -110,144 +105,147 @@ export default function Home() {
   const isVid = (t: string) => t === "ugc_video" || t === "motion_video";
 
   return (
-    <main style={{ position: "relative", zIndex: 2, maxWidth: 1180, margin: "0 auto", padding: "0 24px 120px" }}>
+    <main style={{ position: "relative", zIndex: 2, maxWidth: 1100, margin: "0 auto", padding: "0 28px 120px" }}>
       <div className="grain" />
       <EmberField />
+      <PixelGrid side="left" />
+      <PixelGrid side="right" />
       {loading && <LaunchSequence goal={goal} website={website} />}
 
-      {/* ── masthead ───────────────────────────────────────────────────── */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "26px 0 40px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <Igniter live={loading} />
-          <span className="mono" style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--muted)" }}>
-            LAUNCH&nbsp;CONTROL
-          </span>
-        </div>
-        <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <span className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--ignite)" }}>CONSOLE</span>
-          <Link href="/assets" className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--faint)", textDecoration: "none" }}>ASSETS</Link>
-          <span className="eyebrow">CLAUDE · OPUS&nbsp;4.8</span>
-        </nav>
-      </header>
-
-      {/* ── hero ───────────────────────────────────────────────────────── */}
+      {/* ── hero + composer ─────────────────────────────────────────────── */}
       {!plan && (
-        <section style={{ position: "relative", textAlign: "center", marginBottom: 48 }}>
-          <div style={{
-            position: "absolute", inset: "-40% 0 auto 0", height: 420, zIndex: -1,
-            background: "radial-gradient(closest-side, rgba(255,106,26,0.22), transparent 70%)",
-            animation: "glowpulse 5s ease-in-out infinite",
-          }} />
-          <p className="eyebrow rise" style={{ marginBottom: 18 }}>SOCIAL LAUNCH · AUTONOMOUS</p>
-          <h1 className="rise" style={{
-            fontSize: "clamp(44px, 7vw, 88px)", fontWeight: 800, lineHeight: 0.96,
-            letterSpacing: "-0.03em", margin: 0, animationDelay: "60ms",
-          }}>
-            A whole week of launch,<br />
-            <span style={{ color: "var(--ignite)" }}>from one sentence.</span>
-          </h1>
-          <p className="rise" style={{
-            maxWidth: 620, margin: "22px auto 0", color: "var(--muted)", fontSize: 17, lineHeight: 1.6,
-            animationDelay: "120ms",
-          }}>
-            Give it the mission, the call to action, and a website. A crew of Claude
-            agents plans seven days of content, writes it on-brand, films it, and
-            grades its own work before a single post goes out.
-          </p>
-          <FloatingTiles />
-        </section>
-      )}
-
-      {/* ── console: inputs ────────────────────────────────────────────── */}
-      {!plan && (
-        <section className="rise" style={{
-          maxWidth: 760, margin: "0 auto", animationDelay: "180ms",
-          background: "linear-gradient(180deg, var(--panel) 0%, var(--void-2) 100%)",
-          border: "1px solid var(--line)", borderRadius: 18, padding: 26,
-          boxShadow: "0 40px 120px -40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.03)",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-            <span className="eyebrow">FLIGHT&nbsp;PARAMETERS</span>
-            <span className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>03&nbsp;REQUIRED</span>
-          </div>
-          <Field n="01" label="MISSION OBJECTIVE" value={goal} onChange={setGoal}
-            placeholder={typed || "What are you trying to accomplish?"}
-            onFocus={() => setGoalFocused(true)} onBlur={() => setGoalFocused(false)} />
-          <Field n="02" label="CALL TO ACTION" value={cta} onChange={setCta} placeholder="What should people do?" />
-          <Field n="03" label="TARGET SITE" value={website} onChange={setWebsite} placeholder="https://the-nonprofit.org" />
-
-          {/* one-click missions — fast demo + proves it reruns on any campaign */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-            <span className="eyebrow" style={{ color: "var(--faint)" }}>TRY</span>
-            {EXAMPLES.map((ex) => (
-              <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); }}
-                className="mono" style={{
-                  fontSize: 11, letterSpacing: "0.04em", cursor: "pointer", color: "var(--muted)",
-                  background: "var(--void)", border: "1px solid var(--line)", borderRadius: 99, padding: "5px 12px",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--ignite)"; e.currentTarget.style.color = "var(--ember)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--line)"; e.currentTarget.style.color = "var(--muted)"; }}>
-                {ex.label}
-              </button>
-            ))}
-          </div>
-
-          <button onClick={generate} disabled={loading} style={{
-            marginTop: 22, width: "100%", border: 0, cursor: loading ? "default" : "pointer",
-            borderRadius: 12, padding: "16px 20px", fontFamily: "var(--font-mono)",
-            fontSize: 14, letterSpacing: "0.14em", fontWeight: 700, color: "#160a02",
-            background: loading
-              ? "linear-gradient(180deg, #3a3a44, #2a2a32)"
-              : "linear-gradient(180deg, var(--ignite-2), var(--ignite))",
-            boxShadow: loading ? "none" : "0 16px 40px -12px rgba(255,106,26,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
-            transition: "transform 0.12s ease",
-          }}
-            onMouseDown={(e) => !loading && (e.currentTarget.style.transform = "scale(0.99)")}
-            onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}>
-            {loading ? "▮ RUNNING LAUNCH SEQUENCE…" : "▲ INITIATE LAUNCH SEQUENCE"}
-          </button>
-          {err && <p className="mono" style={{ color: "var(--abort)", marginTop: 14, fontSize: 12 }}>ABORT · {err}</p>}
-        </section>
-      )}
-
-      {/* ── crew roster ────────────────────────────────────────────────── */}
-      {!plan && (
-        <section className="rise" style={{ maxWidth: 760, margin: "26px auto 0", animationDelay: "240ms" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px,1fr))", gap: 8 }}>
-            {CREW.map((c, i) => {
-              const active = loading && i <= (tick % (CREW.length + 1));
-              return (
-                <div key={c.id} style={{
-                  border: `1px solid ${active ? "var(--ignite)" : "var(--line)"}`,
-                  background: active ? "rgba(255,106,26,0.07)" : "var(--panel)",
-                  borderRadius: 10, padding: "10px 11px", transition: "all 0.3s ease",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{
-                      width: 6, height: 6, borderRadius: 99,
-                      background: active ? "var(--go)" : "var(--faint)",
-                      boxShadow: active ? "0 0 8px var(--go)" : "none",
-                      animation: active ? "blink 1s steps(1) infinite" : "none",
-                    }} />
-                    <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.08em", color: active ? "var(--fg)" : "var(--faint)" }}>{c.role}</span>
-                  </div>
-                  <div style={{ fontSize: 10.5, color: "var(--faint)", marginTop: 5, lineHeight: 1.3 }}>{c.station}</div>
-                </div>
-              );
-            })}
-          </div>
-          {loading && (
-            <p className="mono" style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: "var(--muted)" }}>
-              crew working in parallel · the critic is grading every draft before it ships
+        <>
+          <section style={{ position: "relative", textAlign: "center", paddingTop: 74 }}>
+            <TileCluster />
+            <div className="rise" style={{
+              display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 22,
+              border: "1px solid var(--line)", borderRadius: 999, padding: "6px 14px",
+              background: "rgba(255,255,255,0.02)",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--ignite)", boxShadow: "0 0 8px var(--ignite)" }} />
+              <span className="mono" style={{ fontSize: 10.5, letterSpacing: "0.2em", color: "var(--muted)" }}>SOCIAL LAUNCH · AUTONOMOUS</span>
+            </div>
+            <h1 className="rise" style={{
+              fontSize: "clamp(40px, 6vw, 76px)", fontWeight: 800, lineHeight: 0.98,
+              letterSpacing: "-0.035em", margin: 0, animationDelay: "60ms",
+            }}>
+              A whole week of launch,<br />
+              <span style={{
+                background: "linear-gradient(100deg, var(--ignite-2), var(--ignite) 52%, var(--ember))",
+                WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+              }}>from one sentence.</span>
+            </h1>
+            <p className="rise" style={{
+              maxWidth: 580, margin: "22px auto 0", color: "var(--muted)", fontSize: 16.5, lineHeight: 1.65,
+              animationDelay: "120ms",
+            }}>
+              Give it the mission, the call to action, and a website. A crew of Claude agents
+              plans seven days of content, writes it on-brand, films it, and grades its own
+              work before a single post goes out.
             </p>
-          )}
-        </section>
+          </section>
+
+          {/* composer */}
+          <section className="rise" style={{
+            maxWidth: 720, margin: "34px auto 0", animationDelay: "180ms",
+            background: "linear-gradient(180deg, var(--panel) 0%, var(--void-2) 100%)",
+            border: "1px solid var(--line)", borderRadius: 20, padding: 22,
+            boxShadow: "0 40px 120px -50px rgba(0,0,0,0.85), 0 0 70px -50px rgba(255,106,26,0.5), inset 0 1px 0 rgba(255,255,255,0.04)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <span className="eyebrow">Flight Parameters</span>
+              <span className="mono" style={{ fontSize: 10.5, color: "var(--faint)" }}>⌘↵ to launch</span>
+            </div>
+
+            <textarea
+              value={goal} onChange={(e) => setGoal(e.target.value)}
+              onFocus={() => setGoalFocused(true)} onBlur={() => setGoalFocused(false)}
+              onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); }}
+              placeholder={typed ? `e.g. ${typed}` : "What are you trying to accomplish?"}
+              rows={2}
+              style={{
+                width: "100%", resize: "none", background: "var(--void)", border: "1px solid var(--line)",
+                borderRadius: 14, padding: "15px 16px", color: "var(--fg)", fontSize: 18, lineHeight: 1.45,
+                transition: "border-color 0.15s ease",
+              }}
+              onFocusCapture={(e) => (e.currentTarget.style.borderColor = "var(--ignite)")}
+              onBlurCapture={(e) => (e.currentTarget.style.borderColor = "var(--line)")}
+            />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+              <ChipInput icon={<PlatformGlyph p="x" />} label="Call to action" value={cta} onChange={setCta} placeholder="What should people do?" />
+              <ChipInput
+                icon={<svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>}
+                label="Target site" value={website} onChange={setWebsite} placeholder="https://the-nonprofit.org" />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+              <span className="eyebrow" style={{ color: "var(--faint)", fontSize: 9.5 }}>Try</span>
+              {EXAMPLES.map((ex) => (
+                <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); setErr(""); }}
+                  className="mono" style={{
+                    fontSize: 11, letterSpacing: "0.03em", cursor: "pointer", color: "var(--muted)",
+                    background: "var(--void)", border: "1px solid var(--line)", borderRadius: 99, padding: "5px 12px",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--ignite)"; e.currentTarget.style.color = "var(--ember)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--line)"; e.currentTarget.style.color = "var(--muted)"; }}>
+                  {ex.label}
+                </button>
+              ))}
+              <button onClick={generate} disabled={loading} style={{
+                marginLeft: "auto", border: 0, cursor: loading ? "default" : "pointer",
+                borderRadius: 12, padding: "13px 22px", fontFamily: "var(--font-mono)",
+                fontSize: 13, letterSpacing: "0.12em", fontWeight: 700, color: "#160a02",
+                background: loading ? "linear-gradient(180deg, #3a3a44, #2a2a32)" : "linear-gradient(180deg, var(--ignite-2), var(--ignite))",
+                boxShadow: loading ? "none" : "0 16px 40px -12px rgba(255,106,26,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
+                transition: "transform 0.12s ease",
+              }}
+                onMouseDown={(e) => !loading && (e.currentTarget.style.transform = "scale(0.98)")}
+                onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}>
+                {loading ? "▮ LAUNCHING…" : "▲ INITIATE LAUNCH"}
+              </button>
+            </div>
+
+            {err && <p className="mono" style={{ color: "var(--abort)", marginTop: 14, fontSize: 12 }}>ABORT · {err}</p>}
+            <div style={{ textAlign: "center", marginTop: 16 }}>
+              <button onClick={loadSample} className="mono" style={{
+                background: "transparent", border: 0, cursor: "pointer", color: "var(--muted)",
+                fontSize: 11.5, letterSpacing: "0.06em",
+              }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--ember)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}>
+                no API key handy? watch a finished sample week →
+              </button>
+            </div>
+          </section>
+
+          {/* how it works */}
+          <section className="rise" style={{ maxWidth: 900, margin: "60px auto 0", animationDelay: "260ms" }}>
+            <div className="eyebrow" style={{ textAlign: "center", marginBottom: 22 }}>How the launch sequence runs</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+              {[
+                { n: "01", t: "Plot the arc", d: "The strategist reads your site and lays seven days of themes that build to the event." },
+                { n: "02", t: "Draft on-brand", d: "Channel writers draft every X, LinkedIn, and Instagram post in your real voice." },
+                { n: "03", t: "Grade before launch", d: "The critic scores each draft for AI-tells and fabrication, rewrites the misses, and clears the week to GO." },
+              ].map((s) => (
+                <div key={s.n} style={{
+                  border: "1px solid var(--line)", borderRadius: 14, padding: 18,
+                  background: "linear-gradient(180deg, var(--panel), var(--void-2))",
+                }}>
+                  <span className="mono" style={{ fontSize: 12, color: "var(--ignite)", letterSpacing: "0.1em" }}>{s.n}</span>
+                  <div style={{ fontSize: 16, fontWeight: 700, margin: "10px 0 7px", letterSpacing: "-0.01em" }}>{s.t}</div>
+                  <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.55, margin: 0 }}>{s.d}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
       )}
 
       {/* ── results: readiness + flight plan ───────────────────────────── */}
       {plan && scorecard && (
-        <>
+        <div style={{ paddingTop: 30 }}>
           <ReadinessBoard plan={plan} scorecard={scorecard} onReset={() => { setPlan(null); setScorecard(null); }} />
           {err && <p className="mono" style={{ color: "var(--abort)", margin: "0 0 18px", fontSize: 12 }}>· {err}</p>}
           <div style={{ display: "grid", gap: 14 }}>
@@ -256,7 +254,7 @@ export default function Home() {
                 mediaBusy={mediaBusy} onMakeMedia={makeMedia} isVid={isVid} />
             ))}
           </div>
-        </>
+        </div>
       )}
     </main>
   );
@@ -264,41 +262,24 @@ export default function Home() {
 
 // ─── pieces ───────────────────────────────────────────────────────────────────
 
-function Igniter({ live }: { live: boolean }) {
+function ChipInput({ icon, label, value, onChange, placeholder }:
+  { icon: React.ReactNode; label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <span style={{ position: "relative", width: 16, height: 16, display: "inline-block" }}>
-      <span style={{
-        position: "absolute", inset: 0, borderRadius: 99,
-        background: "radial-gradient(circle, var(--ignite-2), var(--ignite) 60%, transparent)",
-        boxShadow: "0 0 14px var(--ignite)",
-        animation: live ? "flamewob 0.7s ease-in-out infinite" : "glowpulse 3s ease-in-out infinite",
-      }} />
-    </span>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10, background: "var(--void)",
+      border: "1px solid var(--line)", borderRadius: 12, padding: "11px 13px",
+      transition: "border-color 0.15s ease",
+    }}>
+      <span style={{ color: "var(--faint)", display: "flex", flex: "0 0 auto" }}>{icon}</span>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={label}
+        style={{ width: "100%", background: "transparent", border: 0, color: "var(--fg)", fontSize: 14 }}
+        onFocus={(e) => (e.currentTarget.parentElement!.style.borderColor = "var(--ignite)")}
+        onBlur={(e) => (e.currentTarget.parentElement!.style.borderColor = "var(--line)")} />
+    </div>
   );
 }
 
-function Field({ n, label, value, onChange, placeholder, onFocus, onBlur }:
-  { n: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string;
-    onFocus?: () => void; onBlur?: () => void }) {
-  return (
-    <label style={{ display: "block", marginBottom: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-        <span className="mono" style={{ fontSize: 10, color: "var(--ignite)" }}>{n}</span>
-        <span className="eyebrow" style={{ color: "var(--muted)" }}>{label}</span>
-      </div>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{
-        width: "100%", background: "var(--void)", border: "1px solid var(--line)",
-        borderRadius: 10, padding: "13px 14px", color: "var(--fg)", fontSize: 15,
-        transition: "border-color 0.15s ease",
-      }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--ignite)"; onFocus?.(); }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--line)"; onBlur?.(); }} />
-    </label>
-  );
-}
-
-// Cycling typewriter for the mission-objective placeholder — the AI-prompt feel.
-// Types a phrase, holds, deletes, advances. Pauses entirely when `active` is false.
+// Cycling typewriter for the mission placeholder — the AI-prompt feel.
 function useTypewriter(phrases: string[], active: boolean): string {
   const [out, setOut] = useState("");
   const st = useRef({ p: 0, i: 0, del: false });
@@ -311,16 +292,16 @@ function useTypewriter(phrases: string[], active: boolean): string {
       if (!s.del) {
         s.i++;
         setOut(full.slice(0, s.i));
-        if (s.i >= full.length) { s.del = true; timer = setTimeout(tick, 1500); return; }
-        timer = setTimeout(tick, 38 + Math.random() * 40);
+        if (s.i >= full.length) { s.del = true; timer = setTimeout(tick, 1600); return; }
+        timer = setTimeout(tick, 40 + Math.random() * 40);
       } else {
         s.i--;
         setOut(full.slice(0, Math.max(0, s.i)));
-        if (s.i <= 0) { s.del = false; s.p++; timer = setTimeout(tick, 300); return; }
+        if (s.i <= 0) { s.del = false; s.p++; timer = setTimeout(tick, 320); return; }
         timer = setTimeout(tick, 18);
       }
     };
-    timer = setTimeout(tick, 260);
+    timer = setTimeout(tick, 280);
     return () => clearTimeout(timer);
   }, [active, phrases]);
   return active ? out : "";
@@ -481,49 +462,52 @@ function SlotCard({ slot, busy, onRender, isVid }:
   );
 }
 
-// ─── hero: floating content tiles suggesting the week of posts ────────────────
-function FloatingTiles() {
+// ─── hero: a cluster of tilted post-cards floating above the headline ──────────
+function TileCluster() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  // Edge-anchored so they frame the hero without crowding the headline.
-  const tiles = [
-    { p: "x", txt: "the tide doesn't clean itself. 9am Saturday. be there.", side: "left", top: 4, rot: -7, anim: "float1", dur: 7, delay: 0.9, type: "TEXT" },
-    { p: "instagram", txt: "before / after — one morning, one beach", side: "left", top: 56, rot: 5, anim: "float2", dur: 8.5, delay: 1.1, type: "STILL" },
-    { p: "linkedin", txt: "Why our team blocks off Saturday mornings for the coast.", side: "right", top: 8, rot: 6, anim: "float2", dur: 7.6, delay: 1.0, type: "TEXT" },
-    { p: "instagram", txt: "60 sec: what 80 volunteers pulled off the sand", side: "right", top: 58, rot: -5, anim: "float1", dur: 9, delay: 1.25, type: "UGC FILM" },
-  ];
-  if (!mounted) return null;
   return (
-    <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: -1, pointerEvents: "none" }}>
-      {tiles.map((t, i) => (
+    <div aria-hidden style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", gap: 0, marginBottom: 26, minHeight: 132 }}>
+      {CLUSTER.map((t, i) => (
         <div key={i} style={{
-          position: "absolute", top: `${t.top}%`,
-          [t.side]: "min(2vw, 12px)" as any,
-          width: 188, ["--r" as any]: `${t.rot}deg`,
-          animation: `tilein 0.7s cubic-bezier(0.16,1,0.3,1) ${t.delay}s both, ${t.anim} ${t.dur}s ease-in-out ${t.delay + 0.7}s infinite`,
+          width: 178, marginLeft: i ? -28 : 0, marginTop: t.top, zIndex: i === 1 ? 3 : 1,
+          ["--r" as any]: `${t.r}deg`,
+          animation: mounted
+            ? `dropin 0.7s cubic-bezier(0.16,1,0.3,1) ${0.15 + i * 0.1}s both, floatA ${6 + i}s ease-in-out ${1 + i * 0.2}s infinite`
+            : "none",
+          opacity: mounted ? undefined : 0,
         }}>
           <div style={{
-            background: "linear-gradient(180deg, rgba(22,22,30,0.9), rgba(13,13,18,0.9))",
-            border: "1px solid var(--line)", borderRadius: 12, padding: "11px 12px",
-            boxShadow: "0 24px 50px -24px rgba(0,0,0,0.8)", backdropFilter: "blur(6px)",
+            textAlign: "left", background: "linear-gradient(180deg, rgba(24,24,32,0.96), rgba(13,13,18,0.96))",
+            border: "1px solid var(--line-bright)", borderRadius: 13, padding: "12px 13px",
+            boxShadow: "0 30px 60px -28px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.04)",
+            backdropFilter: "blur(8px)",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7, color: "var(--faint)" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
                 <PlatformGlyph p={t.p} />
-                <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.08em" }}>{PLATFORM_LABEL[t.p]}</span>
+                <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.1em" }}>{PLATFORM_LABEL[t.p]}</span>
               </span>
-              <span className="mono" style={{ fontSize: 7.5, letterSpacing: "0.08em", border: "1px solid var(--line-bright)", borderRadius: 4, padding: "1px 5px" }}>{t.type}</span>
+              <span className="mono" style={{ fontSize: 7.5, letterSpacing: "0.1em", color: "var(--faint)", border: "1px solid var(--line-bright)", borderRadius: 4, padding: "1px 6px" }}>{t.type}</span>
             </div>
-            <div style={{ fontSize: 11, lineHeight: 1.45, color: "var(--fg)", textAlign: "left", opacity: 0.85 }}>{t.txt}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8 }}>
+            <div style={{ fontSize: 11.5, lineHeight: 1.45, color: "var(--fg)", opacity: 0.92, minHeight: 50 }}>{t.txt}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 9 }}>
               <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--go)", boxShadow: "0 0 6px var(--go)" }} />
-              <span className="mono" style={{ fontSize: 8, letterSpacing: "0.1em", color: "var(--go)" }}>GO</span>
+              <span className="mono" style={{ fontSize: 8, letterSpacing: "0.12em", color: "var(--go)" }}>GO</span>
             </div>
           </div>
         </div>
       ))}
     </div>
   );
+}
+
+// ─── pixel-grid side blooms (orange, masked, gently pulsing) ────────────────────
+function PixelGrid({ side }: { side: "left" | "right" }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return <div className="pixelgrid" data-side={side}><i /><b /></div>;
 }
 
 // ─── atmosphere: engine embers drifting up like exhaust ────────────────────────
@@ -592,7 +576,6 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
     const lg = setInterval(() => {
       if (i < SCRIPT.length) { setLines((l) => [...l, SCRIPT[i]]); i++; }
     }, 620);
-    // asymptotic charge toward ~93% (completes for real when the overlay unmounts)
     const ch = setInterval(() => setPct((p) => p + (93 - p) * 0.08), 140);
     return () => { clearInterval(ph); clearInterval(lg); clearInterval(ch); };
   }, [SCRIPT]);
@@ -611,7 +594,6 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
         boxShadow: "0 60px 160px -50px rgba(0,0,0,0.9), 0 0 80px -40px rgba(255,106,26,0.5)",
         padding: 26, position: "relative", overflow: "hidden",
       }}>
-        {/* sweep line */}
         <span style={{ position: "absolute", top: 0, width: "30%", height: 2, background: "linear-gradient(90deg, transparent, var(--ignite), transparent)", animation: "sweep 2.4s linear infinite" }} />
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
@@ -626,7 +608,6 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
           plan → draft → grade → correct · nothing ships until the critic says GO
         </p>
 
-        {/* charging bar */}
         <div style={{ height: 8, borderRadius: 99, background: "var(--void)", border: "1px solid var(--line)", overflow: "hidden", marginBottom: 22 }}>
           <div style={{
             width: `${pct}%`, height: "100%", borderRadius: 99,
@@ -636,7 +617,6 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
           }} />
         </div>
 
-        {/* phase rail */}
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${SEQ_PHASES.length}, 1fr)`, gap: 6, marginBottom: 20 }}>
           {SEQ_PHASES.map((ph, i) => {
             const done = i < phase, active = i === phase;
@@ -654,7 +634,6 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
           })}
         </div>
 
-        {/* telemetry log */}
         <div ref={logRef} style={{
           height: 132, overflow: "hidden", background: "var(--void)", border: "1px solid var(--line)",
           borderRadius: 10, padding: "10px 13px",
@@ -673,3 +652,43 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
     </div>
   );
 }
+
+// ─── baked-in sample week — lets the full payoff render with no API key ─────────
+const g = (failures: string[] = []) => ({ pass: true, failures });
+const SAMPLE_PLAN: Plan = {
+  brand: {
+    name: "Surfrider Foundation",
+    voice: "Plainspoken, urgent, a little salty. No corporate gloss.",
+    summary: "A grassroots coastal-conservation nonprofit rallying volunteers for a Saturday beach cleanup.",
+    colors: ["#0a6cff", "#08c", "#0c2"],
+  },
+  days: [
+    { day: 1, weekday: "Monday", theme: "Sound the alarm", cta: "Save the date: Saturday, 9am, Ocean Beach", isEventDay: false, slots: [
+      { platform: "x", contentType: "text", reaction: "a number that stops the scroll", copy: "Two tons of plastic came off Ocean Beach last spring. Saturday we go back for the rest. 9am, north lot. Bring a friend.", grade: g() },
+      { platform: "instagram", contentType: "image", reaction: "makes you feel the stakes", copy: "What one tide leaves behind.", mediaPrompt: "documentary photo of plastic debris on a foggy California beach at dawn, muted tones", grade: g() },
+    ] },
+    { day: 2, weekday: "Tuesday", theme: "Why it matters", cta: "Tag someone who would show up", isEventDay: false, slots: [
+      { platform: "linkedin", contentType: "text", reaction: "reframes a cleanup as the best team ritual", copy: "We give the team one Saturday a month on the sand. It is the only standup where nobody checks their phone. Here is why we keep doing it.", grade: g(["softened a humblebrag"]) },
+    ] },
+    { day: 3, weekday: "Wednesday", theme: "Proof it works", cta: "Reserve your spot at the link", isEventDay: false, slots: [
+      { platform: "x", contentType: "text", reaction: "turns proof into a dare", copy: "80 volunteers. 3 hours. 1,900 pounds of trash. That was March. April is on you.", grade: g() },
+      { platform: "instagram", contentType: "image", reaction: "the before/after gut-punch", copy: "Same 200 yards of coast. Left: 8am. Right: 11am. That is what showing up looks like.", mediaPrompt: "split before-and-after of a littered vs clean beach cove, natural light", grade: g() },
+    ] },
+    { day: 4, weekday: "Thursday", theme: "Meet the crew", cta: "Sponsor a cleanup (link in bio)", isEventDay: false, slots: [
+      { platform: "instagram", contentType: "ugc_video", reaction: "a face you trust, not a brand", copy: "60 seconds with Dana, who has not missed a cleanup in four years. Ask her why.", mediaPrompt: "handheld vertical interview of a volunteer on a beach, candid, golden hour", grade: g(["cut a cliché opener"]) },
+      { platform: "linkedin", contentType: "text", reaction: "gives a sponsor their business case", copy: "Three reasons your company should sponsor a beach cleanup. The third one is recruiting, and it is the one your CFO will care about.", grade: g() },
+    ] },
+    { day: 5, weekday: "Friday", theme: "Last call", cta: "RSVP for tomorrow", isEventDay: false, slots: [
+      { platform: "x", contentType: "text", reaction: "removes every reason not to come", copy: "Tomorrow. 9am. Ocean Beach, north lot. Gloves and bags are on us. Just show up.", grade: g() },
+    ] },
+    { day: 6, weekday: "Saturday", theme: "Launch day", cta: "Pull up. North lot, 9am.", isEventDay: true, slots: [
+      { platform: "instagram", contentType: "motion_video", reaction: "the hero film, full volume", copy: "Today is the day. Pull up.", mediaPrompt: "energetic launch-day montage of volunteers arriving at a beach, banners, sunrise", grade: g() },
+      { platform: "x", contentType: "text", reaction: "live energy, come now", copy: "Live from Ocean Beach. The crew is here, the coffee is hot, and the coast needs you. Park at the north lot.", grade: g() },
+    ] },
+    { day: 7, weekday: "Sunday", theme: "The payoff", cta: "Join the next one at the link", isEventDay: false, slots: [
+      { platform: "instagram", contentType: "image", reaction: "the payoff that earns the next ask", copy: "Yesterday, 112 of you showed up. This is what you did.", mediaPrompt: "wide shot of a clean beach and a large group of smiling volunteers holding bags", grade: g() },
+      { platform: "linkedin", contentType: "text", reaction: "gratitude that sets up what is next", copy: "112 people. 2,400 pounds. One clean coastline. Thank you. The next cleanup is the second Saturday of May, and we are already short on gloves.", grade: g() },
+    ] },
+  ],
+};
+const SAMPLE_SCORE: Scorecard = { total: 12, passing: 12, fixed: 3 };
