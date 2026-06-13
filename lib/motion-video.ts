@@ -8,6 +8,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { writeFile, readFile, mkdtemp, rm, chmod } from "fs/promises";
+import { existsSync } from "fs";
 import os from "os";
 import path from "path";
 import ffmpegStatic from "ffmpeg-static";
@@ -15,7 +16,18 @@ import { ask, extractJson } from "./llm";
 import { db } from "./store";
 
 const exec = promisify(execFile);
-const FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
+// Resolve the ffmpeg binary robustly: ffmpeg-static's path, then the likely
+// bundled locations on a serverless function, then PATH.
+function resolveFfmpeg(): string {
+  const cands = [
+    ffmpegStatic as unknown as string,
+    path.join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg"),
+    "/var/task/node_modules/ffmpeg-static/ffmpeg",
+  ].filter(Boolean) as string[];
+  for (const c of cands) { try { if (existsSync(c)) return c; } catch { /* next */ } }
+  return (ffmpegStatic as unknown as string) || "ffmpeg";
+}
+let FFMPEG = (ffmpegStatic as unknown as string) || "ffmpeg";
 const FONT = path.join(process.cwd(), "assets", "fonts", "Inter.ttf");
 const BUCKET = process.env.SUPABASE_MEDIA_BUCKET || "media";
 const FALLBACK_BG = ["#f97316", "#0b0b0f", "#1a1a1f"];
@@ -124,6 +136,7 @@ export async function renderStoryboard(storyboard: Storyboard, brand: { colors?:
   const valid = (brand.colors || []).filter((c) => /^#?[0-9a-fA-F]{6}$/.test(c || "")).map((c) => "#" + c.replace("#", ""));
   const palette: string[] = [];
   for (const c of (valid.length ? valid : FALLBACK_BG).slice(0, 3)) { palette.push(c); palette.push("#0b0b0f"); }
+  FFMPEG = resolveFfmpeg();
   try { await chmod(FFMPEG, 0o755); } catch { /* binary may already be +x */ }
   const tmp = await mkdtemp(path.join(os.tmpdir(), "motion_"));
   try {

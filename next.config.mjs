@@ -6,8 +6,8 @@ const nextConfig = {
   // bundled font; make sure both get traced into the serverless function bundle.
   outputFileTracingIncludes: {
     "/api/generate-media": [
-      "./node_modules/ffmpeg-static/ffmpeg",
-      "./assets/fonts/Inter.ttf",
+      "node_modules/ffmpeg-static/**",
+      "assets/fonts/**",
     ],
   },
 };
