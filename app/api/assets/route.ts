@@ -6,7 +6,9 @@ import { saveAsset, listAssets, dbEnabled, type AssetRecord } from "@/lib/store"
 
 export async function GET(req: NextRequest) {
   const org = req.nextUrl.searchParams.get("org") || "demo";
-  return NextResponse.json({ db: dbEnabled(), assets: await listAssets(org) });
+  // ?status=approved → only shippable media (what the Asset Bay shows). Omit for all.
+  const status = req.nextUrl.searchParams.get("status") || undefined;
+  return NextResponse.json({ db: dbEnabled(), assets: await listAssets(org, 60, status) });
 }
 
 export async function POST(req: NextRequest) {
