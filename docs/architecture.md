@@ -17,6 +17,30 @@
    /api/comments        ──► Zernio comments → Opus reply draft → optional post
 ```
 
+## The image critic (decoupled review lane)
+
+Media generation writes each render to Supabase Storage + an `assets` row with
+`status='pending_review'`. A **separate** consumer — the image critic — claims
+those rows, LOOKS at the image (Opus vision), and writes back a verdict
+(`approved` / `rejected` / `regenerated`). The two sides share only the table
+contract, never code, so the generator can be built independently against it.
+
+```
+  generator ──▶ Storage + assets(status=pending_review)
+                          │  claim_next_asset()  (FOR UPDATE SKIP LOCKED — many reviewers safe)
+                          ▼
+   npm run review ──► claim ─▶ look at image (Opus vision, or header heuristic w/o key)
+                          └─▶ write status + review jsonb  ──▶ generator renders v+1 on `regenerated`
+```
+
+- `lib/review/contract.ts` — the typed table contract + status lifecycle.
+- `lib/review/client.ts` — Supabase queue ops (guarded by `claimed_by`).
+- `lib/review/critic.ts` — vision + heuristic backends; the verdict mapping
+  (version-bounded regenerate loop).
+- `lib/review/{reviewer,worker}.ts` — one unit of work; the poll loop.
+- `scripts/review-worker.ts` — `npm run review` CLI. `app/api/review` — serverless tick + queue stats.
+- Full contract: `docs/review-contract.md`. Schema: `docs/supabase-schema.sql`.
+
 ## Modules
 - `lib/anthropic.ts` — research, plan generation, the critic (`gradeSlot`),
   and the copy-fixer (`fixSlotCopy`). Default model `claude-opus-4-8`.

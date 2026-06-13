@@ -4,13 +4,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateImage, generateVideo, spentSoFar } from "@/lib/fal";
 import { critiqueVisual } from "@/lib/visual-critic";
+import { enqueueForReview, dbEnabled } from "@/lib/store";
 
+export const runtime = "nodejs"; // enqueue path uses node crypto + Storage upload
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { contentType, prompt, imageUrl, brandColors, review, intent } = body;
+    // Optional: after rendering, copy the asset into Supabase Storage and
+    // enqueue a pending_review row for the image critic. Off by default so the
+    // existing demo flow (return the render URL) is unchanged.
+    const { enqueue, org, platform, day, caption, planId, slot, version, parentId, location } = body;
     const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
     if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
@@ -47,7 +53,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ url, stillUrl, visualGrade, spentUsd: spentSoFar() });
+    // Push it into the review queue (Storage upload + pending_review row).
+    // The render is the expensive deliverable; queueing is best-effort metadata,
+    // so a Storage/DB hiccup must NOT discard a successful (paid-for) render.
+    let queued = null;
+    let queueError: string | null = null;
+    if (enqueue && url) {
+      try {
+        queued = await enqueueForReview({
+          sourceUrl: url,
+          posterUrl: contentType === "image" ? url : stillUrl, // the still the critic grades
+          contentType,
+          org, prompt, intent: intent || prompt,
+          brandColors: colors,
+          platform, day, caption, location, planId, slot, version, parentId,
+        });
+      } catch (e: any) {
+        queueError = String(e?.message || e); // surfaced, not fatal — url still returned
+      }
+    }
+
+    return NextResponse.json({ url, stillUrl, visualGrade, queued, queueError, db: dbEnabled(), spentUsd: spentSoFar() });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e), spentUsd: spentSoFar() }, { status: 500 });
   }
