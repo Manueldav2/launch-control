@@ -14,10 +14,36 @@ import Link from "next/link";
 import type { ContentSlot, DayPlan, WeekPlan, Platform } from "@/lib/types";
 import { PlatformPreview } from "../previews/PlatformPreview";
 
-type Row = { slot: ContentSlot; day: DayPlan };
+// A real post published through the platform (via Zernio), as /api/posts returns it.
+type RealPost = { id: string; platform: string; accountId: string; text: string; mediaUrl?: string; mediaType?: string; createdAt?: string | null; metrics?: any };
+
+// One feed item — either a real published post (carries post) or a planned/demo
+// slot (carries day). Real items open the live comment thread; planned items
+// open the preview card.
+type Row = { slot: ContentSlot; day?: DayPlan; post?: RealPost };
 
 const isVideo = (t: string) => t === "ugc_video" || t === "motion_video";
 const abbr = (weekday: string) => weekday.slice(0, 3);
+
+// Relative time for real posts ("3h", "2d"); weekday abbr for planned slots.
+function relTime(iso?: string | null): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  if (!t) return "";
+  const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d`;
+  return `${Math.floor(s / 604800)}w`;
+}
+const rowTime = (r: Row): string => (r.post ? relTime(r.post.createdAt) || "now" : r.day ? abbr(r.day.weekday) : "");
+
+// Map a real post into the ContentSlot shape the preview frames render from.
+function postToSlot(p: RealPost): ContentSlot {
+  const contentType = p.mediaType === "video" ? "ugc_video" : p.mediaUrl ? "image" : "text";
+  return { platform: p.platform as ContentSlot["platform"], reaction: "", contentType: contentType as ContentSlot["contentType"], copy: p.text, mediaUrl: p.mediaUrl };
+}
 
 function handleFromName(name: string): string {
   return (name || "brand").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 18) || "brand";
@@ -45,8 +71,13 @@ const PLATFORM_LABEL: Record<Platform, string> = { x: "X", linkedin: "LinkedIn",
 
 // ── env bar (app chrome above the simulated platform) ─────────────────────────
 
-function EnvBar({ platform, brand }: { platform: Platform; brand: WeekPlan["brand"] }) {
+function EnvBar({ platform, brand, mode }: { platform: Platform; brand: WeekPlan["brand"]; mode?: "loading" | "live" | "preview" }) {
   const pills: Platform[] = ["x", "linkedin", "instagram"];
+  const modeChip = mode === "live"
+    ? { dot: "var(--go)", label: "Live posts", color: "var(--go)" }
+    : mode === "preview"
+    ? { dot: "var(--clay)", label: "Preview of this week", color: "var(--clay-deep)" }
+    : { dot: "var(--border-strong)", label: "Loading…", color: "var(--muted)" };
   return (
     <div
       style={{
@@ -62,8 +93,12 @@ function EnvBar({ platform, brand }: { platform: Platform; brand: WeekPlan["bran
         flexWrap: "wrap",
       }}
     >
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: modeChip.color, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 999, padding: "4px 10px" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: modeChip.dot }} />
+        {modeChip.label}
+      </span>
       <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-        Preview · how <strong style={{ color: "var(--ink)" }}>{brand?.name || "your week"}</strong> looks on
+        <strong style={{ color: "var(--ink)" }}>{brand?.name || "your week"}</strong> on
       </span>
       <div style={{ display: "flex", gap: 5, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 999, padding: 4 }}>
         {pills.map((p) => {
@@ -109,11 +144,11 @@ function Modal({ row, brand, onClose }: { row: Row; brand: WeekPlan["brand"]; on
     >
       <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, color: "#fff" }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>{row.day.weekday}{row.day.isEventDay ? " · Event day" : ""}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{row.day ? `${row.day.weekday}${row.day.isEventDay ? " · Event day" : ""}` : "Preview"}</div>
           <button type="button" onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18 }}>×</button>
         </div>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <PlatformPreview slot={row.slot} brand={brand} variant="card" timeLabel={abbr(row.day.weekday)} />
+          <PlatformPreview slot={row.slot} brand={brand} variant="card" timeLabel={rowTime(row)} />
         </div>
       </div>
     </div>
@@ -149,7 +184,7 @@ function XTimeline({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["bran
         </div>
         {rows.length === 0 ? <EmptyFeed platform="x" dark /> : rows.map((r, i) => (
           <div key={i} onClick={() => onPick(r)} style={{ cursor: "pointer" }}>
-            <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={abbr(r.day.weekday)} />
+            <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} />
           </div>
         ))}
       </div>
@@ -194,7 +229,7 @@ function LinkedInFeed({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["b
               onClick={() => onPick(r)}
               style={{ background: "#fff", border: "1px solid #e0dfdc", borderRadius: 10, overflow: "hidden", marginBottom: 12, cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
             >
-              <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={abbr(r.day.weekday)} />
+              <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} />
             </div>
           ))}
         </main>
@@ -316,18 +351,106 @@ function InstagramProfile({ rows, brand, onPick }: { rows: Row[]; brand: WeekPla
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Comments view — real published post + its live comment thread (Zernio).
+// ════════════════════════════════════════════════════════════════════════════
+
+type Comment = { id: string; author: string; text: string; createdAt?: string | null; avatarUrl?: string };
+
+function CommentsModal({ post, brand, onClose }: { post: RealPost; brand: WeekPlan["brand"]; onClose: () => void }) {
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const dark = post.platform === "x";
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    let alive = true;
+    fetch(`/api/post-comments?postId=${encodeURIComponent(post.id)}&accountId=${encodeURIComponent(post.accountId)}`)
+      .then((r) => (r.ok ? r.json() : { comments: [] }))
+      .then((d) => alive && setComments(d.comments || []))
+      .catch(() => alive && setComments([]));
+    return () => { alive = false; window.removeEventListener("keydown", onKey); };
+  }, [post.id, post.accountId, onClose]);
+
+  const panelBg = dark ? "#15181c" : "#fff";
+  const txt = dark ? "#e7e9ea" : "#1b1f23";
+  const muted = dark ? "#71767b" : "#5e6064";
+  const line = dark ? "#2f3336" : "#e6e6e6";
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,18,15,0.6)", backdropFilter: "blur(3px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px", overflowY: "auto", zIndex: 60 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 540, width: "100%" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, color: "#fff" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Published post · {relTime(post.createdAt) || "live"}</div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", width: 32, height: 32, borderRadius: "50%", cursor: "pointer", fontSize: 18 }}>×</button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <PlatformPreview slot={postToSlot(post)} brand={brand} variant="card" timeLabel={relTime(post.createdAt) || "now"} />
+        </div>
+
+        {/* comment thread */}
+        <div style={{ marginTop: 12, background: panelBg, border: `1px solid ${line}`, borderRadius: 14, overflow: "hidden", fontFamily: '-apple-system,system-ui,"Segoe UI",Roboto,sans-serif' }}>
+          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${line}`, fontSize: 13, fontWeight: 700, color: txt }}>
+            Comments{comments ? ` · ${comments.length}` : ""}
+          </div>
+          {comments === null ? (
+            <div style={{ padding: "28px 16px", textAlign: "center", color: muted, fontSize: 13 }}>Loading comments…</div>
+          ) : comments.length === 0 ? (
+            <div style={{ padding: "28px 16px", textAlign: "center", color: muted, fontSize: 13 }}>No comments on this post yet.</div>
+          ) : (
+            comments.map((c) => (
+              <div key={c.id} style={{ display: "flex", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${line}` }}>
+                <div style={{ width: 34, height: 34, borderRadius: "50%", flexShrink: 0, background: dark ? "#2f3336" : "#e6e6e6", color: txt, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13, overflow: "hidden" }}>
+                  {c.avatarUrl ? <img src={c.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (c.author[0] || "?").toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: txt }}>
+                    <span style={{ fontWeight: 700 }}>{c.author}</span>
+                    {c.createdAt && <span style={{ color: muted, marginLeft: 8, fontWeight: 400 }}>{relTime(c.createdAt)}</span>}
+                  </div>
+                  <div style={{ fontSize: 13.5, color: txt, lineHeight: 1.45, marginTop: 2, whiteSpace: "pre-wrap" }}>{c.text}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 
 export function ChannelEnvironment({ platform, plan }: { platform: Platform; plan: WeekPlan }) {
   const [picked, setPicked] = useState<Row | null>(null);
-  const rows: Row[] = plan.days.flatMap((d) => d.slots.filter((s) => s.platform === platform).map((s) => ({ slot: s, day: d })));
+  const [real, setReal] = useState<RealPost[] | null>(null); // null = loading
+
+  useEffect(() => {
+    let alive = true;
+    setReal(null);
+    fetch(`/api/posts?platform=${platform}`)
+      .then((r) => (r.ok ? r.json() : { posts: [] }))
+      .then((d) => alive && setReal(Array.isArray(d.posts) ? d.posts : []))
+      .catch(() => alive && setReal([]));
+    return () => { alive = false; };
+  }, [platform]);
+
+  // Real published posts when we have them; otherwise the planned/demo week.
+  const usingReal = !!real && real.length > 0;
+  const rows: Row[] = usingReal
+    ? real!.map((p) => ({ slot: postToSlot(p), post: p }))
+    : plan.days.flatMap((d) => d.slots.filter((s) => s.platform === platform).map((s) => ({ slot: s, day: d })));
+
+  const onPick = (r: Row) => setPicked(r);
 
   return (
     <div>
-      <EnvBar platform={platform} brand={plan.brand} />
-      {platform === "x" && <XTimeline rows={rows} brand={plan.brand} onPick={setPicked} />}
-      {platform === "linkedin" && <LinkedInFeed rows={rows} brand={plan.brand} onPick={setPicked} />}
-      {platform === "instagram" && <InstagramProfile rows={rows} brand={plan.brand} onPick={setPicked} />}
-      {picked && <Modal row={picked} brand={plan.brand} onClose={() => setPicked(null)} />}
+      <EnvBar platform={platform} brand={plan.brand} mode={real === null ? "loading" : usingReal ? "live" : "preview"} />
+      {platform === "x" && <XTimeline rows={rows} brand={plan.brand} onPick={onPick} />}
+      {platform === "linkedin" && <LinkedInFeed rows={rows} brand={plan.brand} onPick={onPick} />}
+      {platform === "instagram" && <InstagramProfile rows={rows} brand={plan.brand} onPick={onPick} />}
+      {picked?.post && <CommentsModal post={picked.post} brand={plan.brand} onClose={() => setPicked(null)} />}
+      {picked && !picked.post && <Modal row={picked} brand={plan.brand} onClose={() => setPicked(null)} />}
     </div>
   );
 }
