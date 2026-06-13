@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import MacbookReveal from "./MacbookReveal";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -253,6 +254,9 @@ export default function Home() {
 
           {/* what the crew ships — a live drift of real sample output */}
           <ShipMarquee onPeek={loadSample} />
+
+          {/* scroll-driven laptop reveal of the finished week */}
+          <MacbookReveal />
         </>
       )}
 
