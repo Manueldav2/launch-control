@@ -32,12 +32,44 @@ A swarm of Claude (Opus 4.8) agents then:
 Any nonprofit or small team that needs to fill a room and has nobody to run the
 content. Weeks of work, done in minutes, on-brand, and verified before it ships.
 
-## What "done" means (verifiable by the model, no human)
-- `/api/generate-week` returns a plan where every slot has `grade.pass === true`.
-- The scorecard reads `passing === total`.
-- The deployed URL responds 200 and renders the week.
-See `rubric.md` for the exact checks the critic grades against.
+## What "done" means — verifiable by the model, no human
+`done` is three machine checks, collapsed into one command and one exit code:
 
-## Rerun it on anything tomorrow
-Change the three inputs. A food drive, a 5k, a product launch. Same engine,
-same rubric, same done-check. Nothing about the pipeline is cleanup-specific.
+```
+node scripts/verify.mjs --url <deployed-url> --run \
+     --goal "..." --cta "..." --website "https://..."
+```
+
+It exits non-zero unless ALL of:
+1. **Rubric tests pass** — `lib/*.test.ts` assert every check in `rubric.md`
+   (copy #1–6 + visual V0–V3), offline, no API key. Run on its own,
+   `node scripts/verify.mjs` checks just this: a zero-setup proof the rubric holds.
+2. **The URL responds 200.**
+3. **The scorecard reads `passing === total`** — every slot, copy and media,
+   passed its own critic.
+
+`rubric.md` is the single contract: the critic enforces it, the tests prove it,
+`verify.mjs` checks it.
+
+## Rerun it on any problem tomorrow — one command
+```
+node scripts/launch.mjs --goal "..." --cta "..." --website "https://..."
+```
+Swap the three inputs and the same engine, rubric, and done-check run on a new
+campaign — zero code changes:
+- `--goal "Pack 10,000 meals" --cta "Claim a shift" --website "https://foodbank.org"`
+- `--goal "Sell out our 5k" --cta "Grab a bib" --website "https://run.org"`
+- `--goal "Launch the v2 app" --cta "Join the waitlist" --website "https://acme.com"`
+
+Nothing about the pipeline is cleanup-specific.
+
+## Orchestration in one breath
+One planner → one critic loop (grade → fix → re-grade, every slot in parallel) →
+one rubric (`rubric.md`) → one done-check (`verify.mjs`). Start the app
+(`npm run dev`), then `launch.mjs` runs a campaign and `verify.mjs` proves it's
+done. Another team reruns it tomorrow by changing three strings.
+
+> The two scripts run with plain `node` (zero deps). For `npm test` /
+> `npm run launch` / `npm run verify`, add to `package.json` (build-agent lane):
+> `"test": "tsx --test lib/*.test.ts"`, `"launch": "node scripts/launch.mjs"`,
+> `"verify": "node scripts/verify.mjs"`.
