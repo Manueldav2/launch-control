@@ -41,10 +41,21 @@ function buildProfile(a: any) {
   };
 }
 
+// The platform entry inside a Zernio post (carries the real publish result).
+function pfEntry(p: any, channel: string): any {
+  const zp = TO_ZERNIO[channel] || channel;
+  const arr = p.platforms || [];
+  return arr.find((x: any) => x.platform === zp) || arr[0] || null;
+}
+
 function normalize(p: any, channel: string, accountId: string) {
   const { mediaUrl, mediaType } = pickMedia(p);
   const status = p.status || "published";
   const scheduledFor = p.scheduledFor || null;
+  const pf = pfEntry(p, channel);
+  // The username this post was ACTUALLY published to (truth), so we can drop
+  // posts that went to an old/now-disconnected account on this profile.
+  const liveUsername = (pf?.platformSpecificData?.__usernameSnapshot || pf?.accountId?.username || "").toString();
   return {
     id: String(p.id || p._id || p.postId || ""),
     platform: channel,
@@ -54,11 +65,24 @@ function normalize(p: any, channel: string, accountId: string) {
     mediaType,
     status,
     scheduledFor,
+    url: pf?.platformPostUrl || null, // real on-platform URL once it actually published
+    liveUsername,
     // The date this post lives on: when it went out, or when it's scheduled to.
-    date: p.publishedAt || scheduledFor || p.createdAt || p.created_at || null,
+    date: p.publishedAt || pf?.publishedAt || scheduledFor || p.createdAt || p.created_at || null,
     createdAt: p.createdAt || p.created_at || p.publishedAt || p.date || null,
     metrics: p.metrics || p.stats || p.insights || null,
   };
+}
+
+// Keep only posts genuinely live on the CURRENTLY connected account: a published
+// post must have a real on-platform URL AND have gone to this account's handle
+// (not an old/disconnected one); scheduled posts for this account are kept.
+function isOnAccount(post: any, accountUsername: string): boolean {
+  const u = (post.liveUsername || "").toLowerCase();
+  const me = (accountUsername || "").toLowerCase();
+  const matchesAccount = !u || !me || u === me;
+  const genuinelyLive = post.status === "scheduled" || !!post.url;
+  return matchesAccount && genuinelyLive;
 }
 
 // Best-effort across the likely Zernio list shapes; first non-empty wins.
@@ -110,7 +134,7 @@ export async function GET(req: NextRequest) {
           const channel = FROM_ZERNIO[a.platform] || a.platform;
           profiles[channel] = buildProfile(a);
           const [pub, sched] = await Promise.all([fetchPosts(profileId, aid), fetchScheduled(aid)]);
-          for (const p of [...pub, ...sched]) out.push(normalize(p, channel, aid));
+          for (const p of [...pub, ...sched]) { const n = normalize(p, channel, aid); if (n.id && isOnAccount(n, a.username)) out.push(n); }
         })
       );
       const posts = out.filter((p) => p.id).sort((x, y) => (x.date && y.date ? +new Date(x.date) - +new Date(y.date) : 0));
@@ -130,10 +154,11 @@ export async function GET(req: NextRequest) {
     const profile = match ? buildProfile(match) : null;
     if (!accountId) return NextResponse.json({ posts: [], profile, connected: false });
 
+    const acctUser = match?.username || profile?.username || "";
     const raw = await fetchPosts(profileId, accountId);
     const posts = raw
       .map((p) => normalize(p, platform || "x", accountId))
-      .filter((p) => p.id)
+      .filter((p) => p.id && isOnAccount(p, acctUser))
       .sort((a, b) => (b.createdAt && a.createdAt ? +new Date(b.createdAt) - +new Date(a.createdAt) : 0));
     return NextResponse.json({ posts, accountId, profileId, profile, connected: !!match });
   } catch (e: any) {
