@@ -68,12 +68,12 @@ function brandColor(brand: WeekPlan["brand"] | undefined, fb = "#0e7490"): strin
   return c ? (c.startsWith("#") ? c : `#${c}`) : fb;
 }
 
-const PLATFORM_LABEL: Record<Platform, string> = { x: "X", linkedin: "LinkedIn", instagram: "Instagram" };
+const PLATFORM_LABEL: Record<string, string> = { x: "X", linkedin: "LinkedIn", instagram: "Instagram", tiktok: "TikTok" };
 
 // ── env bar (app chrome above the simulated platform) ─────────────────────────
 
-function EnvBar({ platform, brand, mode }: { platform: Platform; brand: WeekPlan["brand"]; mode?: "loading" | "live" | "empty" | "disconnected" }) {
-  const pills: Platform[] = ["x", "linkedin", "instagram"];
+function EnvBar({ platform, brand, mode }: { platform: string; brand: WeekPlan["brand"]; mode?: "loading" | "live" | "empty" | "disconnected" }) {
+  const pills = ["x", "linkedin", "instagram", "tiktok"];
   const modeChip = mode === "live"
     ? { dot: "var(--go)", label: "Live posts", color: "var(--go)" }
     : mode === "empty"
@@ -424,11 +424,11 @@ function CommentsModal({ post, brand, onClose }: { post: RealPost; brand: WeekPl
 
 // ════════════════════════════════════════════════════════════════════════════
 
-const PLATFORM_BG: Record<Platform, string> = { x: "#0f0f0f", linkedin: "#0a66c2", instagram: "#bc1888" };
+const PLATFORM_BG: Record<string, string> = { x: "#0f0f0f", linkedin: "#0a66c2", instagram: "#bc1888", tiktok: "#000000" };
 
 type Fetched = { posts: RealPost[]; profile: Profile; connected: boolean };
 
-export function ChannelEnvironment({ platform }: { platform: Platform; plan?: WeekPlan }) {
+export function ChannelEnvironment({ platform }: { platform: Platform | "tiktok"; plan?: WeekPlan }) {
   const [picked, setPicked] = useState<Row | null>(null);
   const [data, setData] = useState<Fetched | null>(null); // null = loading
 
@@ -463,7 +463,7 @@ export function ChannelEnvironment({ platform }: { platform: Platform; plan?: We
       <EnvBar platform={platform} brand={realBrand} mode={mode} />
       {platform === "x" && <XTimeline {...common} />}
       {platform === "linkedin" && <LinkedInFeed {...common} />}
-      {platform === "instagram" && <InstagramProfile {...common} />}
+      {(platform === "instagram" || platform === "tiktok") && <InstagramProfile {...common} />}
       {picked?.post && <CommentsModal post={picked.post} brand={realBrand} onClose={() => setPicked(null)} />}
       {picked && !picked.post && <Modal row={picked} brand={realBrand} onClose={() => setPicked(null)} />}
     </div>

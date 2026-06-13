@@ -13,11 +13,11 @@ import type { WeekPlan, Platform } from "@/lib/types";
 import { ChannelEnvironment } from "../ChannelEnvironment";
 import { loadPlanLocal, DEMO_WEEK } from "../../calendar/plan-store";
 
-const VALID: Platform[] = ["x", "linkedin", "instagram"];
+const VALID = ["x", "linkedin", "instagram", "tiktok"] as const;
 
 export default function ChannelPage() {
   const params = useParams<{ platform: string }>();
-  const platform = params?.platform as Platform;
+  const platform = params?.platform as Platform | "tiktok";
   const [plan, setPlan] = useState<WeekPlan | null>(null);
   const [ready, setReady] = useState(false);
 
