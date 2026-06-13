@@ -7,6 +7,9 @@ Two zero-dependency Node scripts that make Launch Control's orchestration
 |---|---|---|
 | `launch.mjs` | **Rerun the engine on any campaign.** Swap three inputs, get a graded 7-day week, exit `0` only when every slot passes the rubric. | `node scripts/launch.mjs --goal "..." --cta "..." --website "https://..."` |
 | `verify.mjs` | **The "done" gate.** Runs the rubric test suites + checks the URL is 200 + (opt) a real run grades green. One command, one exit code. | `node scripts/verify.mjs [--url <base>] [--run --goal .. --cta .. --website ..]` |
+| `demo-critic.ts` | **Offline self-grading demo** — runs the deterministic critic over a deliberately bad slot and narrates what it catches, then a clean slot passing. No key, no network: a stage demo that always works. | `npx tsx scripts/demo-critic.ts` |
+
+`launch.mjs` + `verify.mjs` are the workflow scripts (the Orchestration story); `demo-critic.ts` is a zero-setup live demo of the critic catching its own mistakes.
 
 Both talk to a running app (`npm run dev`, default `http://localhost:3000`), so
 the planner, the critic loop, and `docs/rubric.md` are the **same code the
