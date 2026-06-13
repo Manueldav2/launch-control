@@ -66,12 +66,13 @@ const section = (t) => console.log(`\n${t}`);
 
 // ── Gate 1: rubric test suites (offline, no API key) — ALWAYS RUNS ───────────
 section("Gate 1. Rubric tests (offline, no API key)");
-const testFiles = readdirSync(join(REPO, "lib"))
-  .filter((f) => f.endsWith(".test.ts"))
-  .map((f) => join("lib", f))
-  .sort();
+// Discover every lib/**/*.test.ts — recurse into subdirs so suites under
+// lib/review/ (the image-critic queue) ride through CI too, not just top-level.
+const findTests = (rel) => readdirSync(join(REPO, rel), { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? findTests(join(rel, e.name)) : (e.name.endsWith(".test.ts") ? [join(rel, e.name)] : []));
+const testFiles = findTests("lib").sort();
 if (testFiles.length === 0) {
-  check("rubric tests", false, "no lib/*.test.ts found");
+  check("rubric tests", false, "no lib/**/*.test.ts found");
 } else {
   const r = spawnSync("npx", ["tsx", "--test", ...testFiles], { cwd: REPO, encoding: "utf8" });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
