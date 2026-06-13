@@ -6,7 +6,6 @@ import { generateWeekPlan } from "@/lib/anthropic";
 import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
 import { fixRender } from "@/lib/visual-critic";
 import { generateImage } from "@/lib/fal";
-import { userIdFromRequest } from "@/lib/auth-server";
 import { cacheKeyFor, getCached, setCached } from "@/lib/demo-cache";
 import type { WeekInputs, ContentType } from "@/lib/types";
 
@@ -45,10 +44,8 @@ export async function POST(req: NextRequest) {
     const cached = await getCached<{ plan: unknown; scorecard: unknown }>(cacheKey);
     if (cached?.plan) return NextResponse.json({ plan: cached.plan, scorecard: cached.scorecard, cached: true });
 
-    // A novel brief requires sign-in (it spends the host's keys). Text (the
-    // week's copy) is unlimited for a signed-in account; media has a free quota.
-    const userId = await userIdFromRequest(req);
-    if (!userId) return NextResponse.json({ error: "Create a free account to generate your launch week." }, { status: 401 });
+    // Open access: anyone with the link can generate on the host's keys, no
+    // account needed (so judges can try it). Sign-in only adds saved projects.
 
     // The Anthropic key may come from the UI (header or body) and overrides env.
     const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;

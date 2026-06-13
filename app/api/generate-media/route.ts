@@ -21,8 +21,10 @@ const FREE_VIDEOS = parseInt(process.env.FREE_VIDEOS || "1", 10);
 export async function POST(req: NextRequest) {
   try {
     // Gate on sign-in.
+    // Open access: no account needed (judges can try it on the host's keys). The
+    // per-account free-tier quota applies only when signed in; anonymous runs are
+    // guarded by the global fal spend cap (MAX_VIDEO_SPEND_USD).
     const userId = await userIdFromRequest(req);
-    if (!userId) return NextResponse.json({ error: "Create a free account to generate media." }, { status: 401 });
 
     const body = await req.json();
     const {
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
       const { data } = await c.from("usage").select("images,videos").eq("user_id", userId).maybeSingle();
       if (data) used = data as { images: number; videos: number };
     }
-    if (!usingOwnKey) {
+    if (userId && !usingOwnKey) {
       if (isVideo && used.videos >= FREE_VIDEOS)
         return NextResponse.json({ error: `Your free plan includes ${FREE_VIDEOS} video render, and it's used. Add your own fal.ai key to keep rendering. Plain text and planning stay free.`, quota: { kind: "video", used: used.videos, limit: FREE_VIDEOS, canUseOwnKey: true } }, { status: 402 });
       if (!isVideo && used.images >= FREE_IMAGES)
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Count free-tier renders only (own-key renders are on the user's account).
-    if (!usingOwnKey && c) {
+    if (userId && !usingOwnKey && c) {
       await c.from("usage").upsert(
         { user_id: userId, images: used.images + (isVideo ? 0 : 1), videos: used.videos + (isVideo ? 1 : 0), updated_at: new Date().toISOString() },
         { onConflict: "user_id" },
