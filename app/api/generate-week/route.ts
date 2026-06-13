@@ -38,15 +38,20 @@ export async function POST(req: NextRequest) {
           const det = gradeSlot(slot);
           const llm = deep ? await gradeSlotLLM(slot, day.cta, apiKey) : [];
           let failures = [...det.failures, ...llm];
-          if (failures.length) {
+          // Rewrite-and-regrade until the slot passes or we exhaust 3 attempts,
+          // so the week reliably converges to all-green instead of leaving a
+          // stubborn slot failing after a single try.
+          let attempt = 0;
+          while (failures.length && attempt < 3) {
             try {
               slot.copy = await fixSlotCopy(slot, failures, apiKey);
               const det2 = gradeSlot(slot);
               const llm2 = deep ? await gradeSlotLLM(slot, day.cta, apiKey) : [];
               failures = [...det2.failures, ...llm2];
-              fixed++;
+              if (attempt === 0) fixed++;
+              attempt++;
             } catch {
-              /* keep original + its failing grade */
+              break; // keep the last copy + its failing grade
             }
           }
           slot.grade = { pass: failures.length === 0, failures };

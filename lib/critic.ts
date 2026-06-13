@@ -55,13 +55,23 @@ export async function gradeSlotLLM(slot: ContentSlot, cta: string, apiKey?: stri
 
 // Rewrite one failing slot's copy (the regenerate half of the self-correct loop).
 export async function fixSlotCopy(slot: ContentSlot, failures: string[], apiKey?: string): Promise<string> {
+  const fab = failures.some((f) => f.toLowerCase().includes("fabric"));
+  // When fabrication is the failure, the usual cause is an invented specific
+  // (a count, a stat, a quote). Steer hard: drop the specific, keep it concrete
+  // but true. Telling it the exact move is what makes the rewrite converge.
+  const antiFab = fab
+    ? " The post invents a specific number, statistic, quote, or claim that is not " +
+      "established. REMOVE every invented specific: write \"more volunteers\" not " +
+      "\"eleven more\", \"a lot of trash\" not \"1,900 pounds\". Keep it concrete and " +
+      "human without any unverifiable figure or quote."
+    : "";
   return (await ask({
     maxTokens: 400,
     apiKey,
     system:
       "You rewrite social posts to pass review. No em-dashes, no hype words, " +
       "no fabrication. Keep the intent and the CTA. Respect channel limits " +
-      "(x <= 280 chars). Return ONLY the rewritten copy.",
+      "(x <= 280 chars). Return ONLY the rewritten copy." + antiFab,
     user: `This ${slot.platform} post failed: ${failures.join("; ")}.\n\n${slot.copy}`,
   })).trim();
 }

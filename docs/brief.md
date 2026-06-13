@@ -1,43 +1,57 @@
 # Brief — Launch Control
 
-## The problem
-A small nonprofit (a food drive, a beach cleanup) needs a week of social content
-to drive turnout to one event. Doing it well means a strategist, three channel
-writers, a designer, and a video editor. They have none of that. So the week
-goes quiet and the event is under-attended.
+**One sentence in, a posted launch week out.** Give the engine a goal, a call to
+action, a website, and (for in-person events) a location. A crew of Opus 4.8
+agents researches the brand, plans a 7-day arc, writes every post in the brand
+voice, renders the images / UGC / launch films, grades and rewrites itself until
+the week is clean, checks the weather, can spin up a Luma event, and publishes
+across X, LinkedIn, Instagram, and TikTok. Live: https://launch-control-phi.vercel.app
 
-## What we built (hackathon day)
-Give the engine three inputs:
-1. **What you're trying to accomplish** (the goal)
-2. **Your call to action** (what people should do)
-3. **The nonprofit's website** (to research and stay on-brand)
+## Impact — who benefits and why it matters
+A small nonprofit driving turnout to a Saturday event (a beach cleanup, a food
+drive, a home build) needs a strategist, three channel writers, a designer, and a
+video editor. They have none of that, so the week goes quiet and the room is
+half-empty. Launch Control gives that team a full week of on-brand, multi-platform
+content, the media to go with it, and the posting, in minutes. It is built for the
+organizations with the most at stake and the least capacity. Nothing in the
+pipeline is cleanup-specific: change the four inputs and it plans a product launch,
+a 5k, or a fundraiser just as well (the acceptance harness proves this on a fresh
+problem every run).
 
-A swarm of Claude (Opus 4.8) agents then:
-1. **Researches** the site and distills the brand (name, mission, voice, colors).
-2. **Plans a 7-day arc** that crescendos to the event day (e.g. Saturday cleanup).
-   Each day has ONE shared call-to-action across every platform, and each
-   platform (X, LinkedIn, Instagram) targets a distinct reaction.
-3. **Writes the copy** for every slot, channel-appropriate, in the brand voice.
-4. **Renders the media** — images, UGC video (person-to-camera invite), and a
-   motion launch video — via fal.ai, cached and spend-capped.
-5. **Grades itself** — a critic agent checks every slot against `rubric.md`
-   (no AI-tells, no fabrication, CTA present, length limits, media has a prompt)
-   and **regenerates any slot that fails** until the week is green.
-6. **Ships it** — connect X / LinkedIn / Instagram through Zernio, then approve
-   each piece or flip "auto-post the whole week."
-7. **Works the comments** — watches each post and drafts (optionally posts)
-   in-voice replies.
+## Demo — what holds up live
+- Type one goal, watch the crew plan, write, and self-grade a 7-day week (21 slots).
+- The week is grounded in the org's REAL brand: name, voice, and colors scraped
+  from their site, woven into copy and media.
+- Event mode: the copy speaks to the LOCAL audience to drive turnout, a **weather
+  watch** forecasts the event day and, if it looks bad, asks what to do
+  (reschedule, add a rain plan, or proceed), and a **Luma event** is created with a
+  written description.
+- Render images, UGC video, and motion launch films; each render persists to
+  Supabase Storage and is handed to the review queue.
+- One control routes every piece to the right channels and **publishes/schedules
+  the whole week** across X, LinkedIn, Instagram, and TikTok (verified: a real
+  image post landed on X with its media).
 
-## Who it's for
-Any nonprofit or small team that needs to fill a room and has nobody to run the
-content. Weeks of work, done in minutes, on-brand, and verified before it ships.
+## Opus 4.8 — beyond a basic integration
+Opus is the whole crew, not a single call: the **strategist** (7-day arc), the
+**self-grading critic** that rewrites any slot failing a rubric and retries until
+the week is green, a **multimodal visual critic** that looks at rendered frames and
+judges on-brand / on-intent, **brand research** that distills voice + palette from
+raw site HTML, **weather-aware** event decisions, and a **fabrication-grounding**
+rule that keeps the copy honest (no invented numbers or quotes). The self-grade is
+the product surface, not a hidden step.
 
-## What "done" means (verifiable by the model, no human)
-- `/api/generate-week` returns a plan where every slot has `grade.pass === true`.
-- The scorecard reads `passing === total`.
-- The deployed URL responds 200 and renders the week.
-See `rubric.md` for the exact checks the critic grades against.
-
-## Rerun it on anything tomorrow
-Change the three inputs. A food drive, a 5k, a product launch. Same engine,
-same rubric, same done-check. Nothing about the pipeline is cleanup-specific.
+## Orchestration — repeatable and model-verifiable
+"Done" is graded by the model, no human:
+- `scripts/verify.mjs` hits the live URL and grades the whole system against
+  `docs/rubric.md` (deployment up, 4 channels connectable, a 7-day week that
+  self-grades green, brand researched, copy localized, zero AI-tells, weather
+  attached, media renders + persists, routing correct). Exit 0 = accepted.
+- It defaults to a **fresh problem** (a Habitat home build in Atlanta), so a green
+  run is evidence the engine generalizes, and any team can rerun it tomorrow on a
+  new problem: `node scripts/verify.mjs --goal "..." --cta "..." --website "..." --location "..."`.
+- The media create→review→regenerate loop has its own end-to-end check:
+  `node scripts/selftest-media-pipeline.mjs`.
+- Clean lane split: **creation** (plan, write, render, route, publish) and
+  **review** (claim, judge, regenerate) meet at one contract — a `pending_review`
+  asset row plus three REST calls, so either side is swappable.

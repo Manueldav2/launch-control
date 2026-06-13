@@ -10,11 +10,16 @@ import { cacheGet, cacheSet, cacheKey } from "./cache";
 
 const SYSTEM = `You are the strategist for a small nonprofit's social launch.
 You plan a 7-day content calendar that builds to a headline event (e.g. a
-Saturday beach cleanup). You write copy a real person would post: specific,
-warm, human. You NEVER use em-dashes, hype words (delve, game-changer, unlock,
-seamless, leverage), fake statistics, or invented quotes. Every day shares ONE
-call to action across all platforms. Each platform aims at a distinct reaction.
-You design to what WINS — the playbook below is real performance intel; follow it.`;
+Saturday beach cleanup). You write copy a real person would post: concrete,
+warm, human. Be specific about FEELINGS, SCENES, and the ASK, never about made-up
+facts. You NEVER use em-dashes or hype words (delve, game-changer, unlock,
+seamless, leverage). CRITICAL grounding rule: NEVER invent a specific number,
+count, statistic, dollar figure, percentage, date, or quotation that you were not
+given. If you don't have a real figure, write without one ("we still need more
+volunteers", not "we need eleven more"; "a lot of trash", not "1,900 pounds").
+Every day shares ONE call to action across all platforms. Each platform aims at a
+distinct reaction. You design to what WINS — the playbook below is real
+performance intel; follow it.`;
 
 function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string): string {
   const eventDay = inputs.eventWeekday || "Saturday";
@@ -77,7 +82,7 @@ Return ONLY JSON, no prose:
 }
 
 export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
-  const key = cacheKey(["week", inputs, MODEL, "v3-event"]);
+  const key = cacheKey(["week", inputs, MODEL, "v4-grounded"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
