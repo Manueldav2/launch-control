@@ -43,6 +43,10 @@ export interface WeekInputs {
   cta: string; // the overall call to action
   website: string; // the nonprofit / brand site to research and stay on-brand to
   eventWeekday?: string; // when the headline event happens (default "Saturday")
+  // OPTIONAL peer/competitor profile URLs (X / LinkedIn / Instagram) to mine for
+  // the CTA + hook patterns that actually win. Requires BRIGHTDATA_API_TOKEN;
+  // ignored (and the engine behaves exactly as before) when unset.
+  competitors?: string[];
 }
 
 export interface BrandContext {
@@ -58,6 +62,7 @@ export interface WeekPlan {
   inputs: WeekInputs;
   brand: BrandContext;
   playbook?: string; // the researched "what wins" intel that shaped the plan
+  competitorIntel?: string; // real peer CTA/hook patterns mined via Bright Data (optional)
   days: DayPlan[];
   createdAt: string;
 }
