@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { Ic, Mark, PlatformGlyph } from "./icons";
 import { savePlanLocal } from "./calendar/plan-store";
-import { WeatherWatchCard, LumaEventCard, LumaConnectModal } from "./EventControls";
+import { WeatherWatchCard, LumaEventCard, LumaConnectModal, LumaMark } from "./EventControls";
 import type { WeatherWatch, LumaEvent } from "./EventControls";
 import { getLumaKey, setLumaKey } from "@/lib/client-luma";
+import { keyHeaders } from "@/lib/client-key";
+import PublishBar from "./PublishBar";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -241,10 +243,11 @@ export default function Home() {
                 <button onClick={() => setLumaModal(true)} title={lumaConnected ? "Luma connected" : "Connect Luma to auto-create an event"} style={{
                   display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, cursor: "pointer",
                   color: lumaConnected ? "var(--go)" : "var(--muted)", background: "transparent",
-                  border: "1px solid var(--border)", borderRadius: 8, padding: "5px 9px",
+                  border: "1px solid var(--border)", borderRadius: 8, padding: "4px 9px",
                 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 99, background: lumaConnected ? "var(--go)" : "var(--border-strong)" }} />
+                  <LumaMark size={15} radius={4} />
                   {lumaConnected ? "Luma connected" : "Connect Luma"}
+                  {lumaConnected && <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--go)" }} />}
                 </button>
                 <button onClick={generate} disabled={loading} aria-label="Launch" style={{
                   marginLeft: "auto", width: 38, height: 38, borderRadius: 11, border: 0,
@@ -311,6 +314,8 @@ export default function Home() {
       {plan && scorecard && (
         <div style={{ paddingTop: 40 }}>
           <ReadinessBoard plan={plan} scorecard={scorecard} onReset={() => { setPlan(null); setScorecard(null); }} />
+          <PublishBar plan={plan as any} keyHeader={keyHeaders()}
+            onPlanChange={(p: any) => { setPlan(p); savePlanLocal(p); }} />
           {(lumaCreating || luma) && <LumaEventCard luma={luma} creating={lumaCreating} />}
           {plan.weather?.isBad && (
             <WeatherWatchCard weather={plan.weather} resolution={weatherResolved} busy={rescheduling}

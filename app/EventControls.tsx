@@ -18,6 +18,24 @@ export type LumaEvent = { id: string; url: string; name: string; startAt: string
 
 const f = (c: number) => Math.round((c * 9) / 5 + 32);
 
+// Luma's mark: the soft sphere on a near-black rounded square. Inline SVG so it's
+// self-contained (no external asset to hotlink or break).
+export function LumaMark({ size = 22, radius = 6 }: { size?: number; radius?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Luma">
+      <defs>
+        <radialGradient id="lumaSphere" cx="36%" cy="30%" r="80%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="55%" stopColor="#d9d3c8" />
+          <stop offset="100%" stopColor="#8b8378" />
+        </radialGradient>
+      </defs>
+      <rect width="24" height="24" rx={radius} fill="#161616" />
+      <circle cx="12" cy="12" r="6.4" fill="url(#lumaSphere)" />
+    </svg>
+  );
+}
+
 // A cloud-with-rain glyph for wet days, a sun for clear ones. Pure SVG.
 function WeatherGlyph({ wet, size = 22 }: { wet: boolean; size?: number }) {
   return wet ? (
@@ -138,9 +156,7 @@ export function LumaEventCard({ luma, creating }: { luma: LumaEvent | null; crea
   const when = (() => { try { return new Date(luma.startAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }); } catch { return ""; } })();
   return (
     <div className="rise" style={{ border: "1px solid var(--border-strong)", background: "var(--card)", borderRadius: 14, padding: 16, marginBottom: 16, display: "flex", alignItems: "center", gap: 14 }}>
-      <span style={{ width: 38, height: 38, borderRadius: 10, flex: "0 0 auto", background: "var(--ink)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8}><rect x="3" y="4" width="18" height="17" rx="3" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>
-      </span>
+      <span style={{ flex: "0 0 auto", display: "flex" }}><LumaMark size={38} radius={10} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="eyebrow" style={{ color: "var(--faint)" }}>Luma event created</div>
         <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{luma.name}</div>
@@ -179,7 +195,10 @@ export function LumaConnectModal({ open, onClose, onConnected }: {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,12,8,0.4)", backdropFilter: "blur(3px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={(e) => e.stopPropagation()} className="rise" style={{ width: "100%", maxWidth: 440, background: "var(--bg)", border: "1px solid var(--border-strong)", borderRadius: 18, padding: 24, boxShadow: "0 24px 60px rgba(0,0,0,0.25)" }}>
-        <div className="serif" style={{ fontSize: 21, color: "var(--ink)", marginBottom: 5 }}>Connect Luma</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
+          <LumaMark size={28} radius={8} />
+          <div className="serif" style={{ fontSize: 21, color: "var(--ink)" }}>Connect Luma</div>
+        </div>
         <p style={{ fontSize: 13.5, color: "var(--muted)", margin: "0 0 16px", lineHeight: 1.55 }}>
           Paste your Luma API key and event-mode launches will spin up a real Luma event page automatically.
           Find it in Luma under Settings, Developers.

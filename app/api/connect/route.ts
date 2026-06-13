@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveProfileId, connectedChannels, connectUrl } from "@/lib/zernio";
 
-const PLATFORMS = ["x", "linkedin", "instagram"] as const;
+const PLATFORMS = ["x", "linkedin", "instagram", "tiktok"] as const;
 
 export async function GET(req: NextRequest) {
   try {
