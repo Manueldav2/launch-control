@@ -24,6 +24,22 @@ function pickMedia(p: any): { mediaUrl?: string; mediaType?: string } {
   return { mediaUrl: url, mediaType: type };
 }
 
+// Real profile identity from the Zernio account object (no fabricated fields).
+function buildProfile(a: any) {
+  const pd = a.metadata?.profileData || {};
+  const ed = pd.extraData || {};
+  return {
+    username: pd.username || a.username || "",
+    displayName: pd.displayName || a.displayName || pd.username || a.username || "",
+    avatarUrl: pd.profilePicture || a.profilePicture || null,
+    bio: pd.bio || null,
+    followers: typeof pd.followersCount === "number" ? pd.followersCount : typeof a.followersCount === "number" ? a.followersCount : null,
+    following: typeof ed.followsCount === "number" ? ed.followsCount : null,
+    postsCount: typeof ed.mediaCount === "number" ? ed.mediaCount : null,
+    profileUrl: pd.profileUrl || a.profileUrl || null,
+  };
+}
+
 function normalize(p: any, channel: string, accountId: string) {
   const { mediaUrl, mediaType } = pickMedia(p);
   return {
@@ -64,20 +80,25 @@ export async function GET(req: NextRequest) {
     let accountId = sp.get("accountId") || "";
     const profileId = await resolveProfileId();
 
-    if (!accountId && platform) {
-      const accounts = await listAccounts(profileId);
+    let match: any = null;
+    const accounts = await listAccounts(profileId);
+    if (accountId) {
+      match = accounts.find((a: any) => (a._id || a.id || a.accountId) === accountId) || null;
+    } else if (platform) {
       const want = TO_ZERNIO[platform] || platform;
-      const match = accounts.find((a: any) => (a.platform === want || a.channel === platform || a.channel === want));
+      match = accounts.find((a: any) => (a.platform === want || a.channel === platform || a.channel === want)) || null;
       accountId = match?.accountId || match?.id || match?._id || "";
     }
-    if (!accountId) return NextResponse.json({ posts: [] });
+    // Real account identity (no fabrication) for the channel profile header.
+    const profile = match ? buildProfile(match) : null;
+    if (!accountId) return NextResponse.json({ posts: [], profile, connected: false });
 
     const raw = await fetchPosts(profileId, accountId);
     const posts = raw
       .map((p) => normalize(p, platform || "x", accountId))
       .filter((p) => p.id)
       .sort((a, b) => (b.createdAt && a.createdAt ? +new Date(b.createdAt) - +new Date(a.createdAt) : 0));
-    return NextResponse.json({ posts, accountId, profileId });
+    return NextResponse.json({ posts, accountId, profileId, profile, connected: !!match });
   } catch (e: any) {
     // Degrade quietly — the UI falls back to the demo week.
     return NextResponse.json({ posts: [], error: String(e?.message || e) });

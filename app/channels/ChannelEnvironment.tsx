@@ -16,6 +16,7 @@ import { PlatformPreview } from "../previews/PlatformPreview";
 
 // A real post published through the platform (via Zernio), as /api/posts returns it.
 type RealPost = { id: string; platform: string; accountId: string; text: string; mediaUrl?: string; mediaType?: string; createdAt?: string | null; metrics?: any };
+type Profile = { username?: string; displayName?: string; avatarUrl?: string | null; bio?: string | null; followers?: number | null; following?: number | null; postsCount?: number | null } | null;
 
 // One feed item — either a real published post (carries post) or a planned/demo
 // slot (carries day). Real items open the live comment thread; planned items
@@ -71,12 +72,14 @@ const PLATFORM_LABEL: Record<Platform, string> = { x: "X", linkedin: "LinkedIn",
 
 // ── env bar (app chrome above the simulated platform) ─────────────────────────
 
-function EnvBar({ platform, brand, mode }: { platform: Platform; brand: WeekPlan["brand"]; mode?: "loading" | "live" | "preview" }) {
+function EnvBar({ platform, brand, mode }: { platform: Platform; brand: WeekPlan["brand"]; mode?: "loading" | "live" | "empty" | "disconnected" }) {
   const pills: Platform[] = ["x", "linkedin", "instagram"];
   const modeChip = mode === "live"
     ? { dot: "var(--go)", label: "Live posts", color: "var(--go)" }
-    : mode === "preview"
-    ? { dot: "var(--clay)", label: "Preview of this week", color: "var(--clay-deep)" }
+    : mode === "empty"
+    ? { dot: "var(--border-strong)", label: "No posts yet", color: "var(--muted)" }
+    : mode === "disconnected"
+    ? { dot: "var(--border-strong)", label: "Not connected", color: "var(--muted)" }
     : { dot: "var(--border-strong)", label: "Loading…", color: "var(--muted)" };
   return (
     <div
@@ -158,7 +161,7 @@ function Modal({ row, brand, onClose }: { row: Row; brand: WeekPlan["brand"]; on
 function EmptyFeed({ platform, dark }: { platform: Platform; dark?: boolean }) {
   return (
     <div style={{ padding: "60px 24px", textAlign: "center", color: dark ? "#71767b" : "var(--muted)", fontSize: 14 }}>
-      No {PLATFORM_LABEL[platform]} posts in this week yet.
+      No {PLATFORM_LABEL[platform]} posts to show yet.
     </div>
   );
 }
@@ -167,7 +170,7 @@ function EmptyFeed({ platform, dark }: { platform: Platform; dark?: boolean }) {
 // X timeline
 // ════════════════════════════════════════════════════════════════════════════
 
-function XTimeline({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void }) {
+function XTimeline({ rows, brand, onPick, hideStats }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void; hideStats?: boolean }) {
   return (
     <div style={{ background: "#000", minHeight: "calc(100vh - 42px)" }}>
       <div style={{ maxWidth: 600, margin: "0 auto", borderLeft: "1px solid #2f3336", borderRight: "1px solid #2f3336", minHeight: "100%" }}>
@@ -184,7 +187,7 @@ function XTimeline({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["bran
         </div>
         {rows.length === 0 ? <EmptyFeed platform="x" dark /> : rows.map((r, i) => (
           <div key={i} onClick={() => onPick(r)} style={{ cursor: "pointer" }}>
-            <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} />
+            <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} hideStats={hideStats} />
           </div>
         ))}
       </div>
@@ -196,9 +199,9 @@ function XTimeline({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["bran
 // LinkedIn feed
 // ════════════════════════════════════════════════════════════════════════════
 
-function LinkedInFeed({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void }) {
+function LinkedInFeed({ rows, brand, onPick, profile, hideStats }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void; profile?: Profile; hideStats?: boolean }) {
   const font = '-apple-system,system-ui,"Segoe UI",Roboto,sans-serif';
-  const followers = compact(seedNum(brand?.name || "b", 1200, 48000));
+  const followers = profile?.followers != null ? compact(profile.followers) : null;
   return (
     <div style={{ background: "#f4f2ee", minHeight: "calc(100vh - 42px)", fontFamily: font }}>
       <div style={{ display: "flex", gap: 24, maxWidth: 1100, margin: "0 auto", padding: "24px 20px", alignItems: "flex-start" }}>
@@ -214,7 +217,7 @@ function LinkedInFeed({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["b
             <div style={{ height: 1, background: "#e0dfdc", margin: "12px 0" }} />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
               <span style={{ color: "#5e6064" }}>Followers</span>
-              <span style={{ color: "#0a66c2", fontWeight: 600 }}>{followers}</span>
+              <span style={{ color: "#0a66c2", fontWeight: 600 }}>{followers ?? "—"}</span>
             </div>
           </div>
         </aside>
@@ -229,7 +232,7 @@ function LinkedInFeed({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["b
               onClick={() => onPick(r)}
               style={{ background: "#fff", border: "1px solid #e0dfdc", borderRadius: 10, overflow: "hidden", marginBottom: 12, cursor: "pointer", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
             >
-              <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} />
+              <PlatformPreview slot={r.slot} brand={brand} variant="feed" timeLabel={rowTime(r)} hideStats={hideStats} />
             </div>
           ))}
         </main>
@@ -242,7 +245,7 @@ function LinkedInFeed({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["b
 // Instagram profile + grid
 // ════════════════════════════════════════════════════════════════════════════
 
-function GridTile({ row, brand, onPick }: { row: Row; brand: WeekPlan["brand"]; onPick: (r: Row) => void }) {
+function GridTile({ row, brand, onPick, hideStats }: { row: Row; brand: WeekPlan["brand"]; onPick: (r: Row) => void; hideStats?: boolean }) {
   const { slot } = row;
   const [hover, setHover] = useState(false);
   const likes = compact(seedNum(slot.copy, 120, 8400));
@@ -280,7 +283,7 @@ function GridTile({ row, brand, onPick }: { row: Row; brand: WeekPlan["brand"]; 
           <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
         </span>
       )}
-      {hover && (
+      {hover && !hideStats && (
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: 20, color: "#fff", fontWeight: 700, fontSize: 14 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M12 21s-7-4.5-9.3-8.3C1 9.9 2 6.5 5.2 6c1.9-.3 3.5.8 4.3 2.1l.5.8.5-.8C11.3 6.8 12.9 5.7 14.8 6 18 6.5 19 9.9 17.3 12.7 15 16.5 12 21 12 21z" /></svg>
@@ -296,11 +299,11 @@ function GridTile({ row, brand, onPick }: { row: Row; brand: WeekPlan["brand"]; 
   );
 }
 
-function InstagramProfile({ rows, brand, onPick }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void }) {
+function InstagramProfile({ rows, brand, onPick, profile, hideStats }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void; profile?: Profile; hideStats?: boolean }) {
   const font = '-apple-system,system-ui,"Segoe UI",Roboto,sans-serif';
-  const handle = handleFromName(brand?.name || "");
-  const followers = compact(seedNum(brand?.name || "b", 1800, 92000));
-  const following = compact(seedNum((brand?.name || "b") + "f", 120, 900));
+  const handle = profile?.username || handleFromName(brand?.name || "");
+  const followers = profile?.followers != null ? compact(profile.followers) : null;
+  const following = profile?.following != null ? compact(profile.following) : null;
   return (
     <div style={{ background: "#fff", minHeight: "calc(100vh - 42px)", fontFamily: font, color: "#000" }}>
       <div style={{ maxWidth: 935, margin: "0 auto", padding: "30px 20px 0" }}>
@@ -322,9 +325,9 @@ function InstagramProfile({ rows, brand, onPick }: { rows: Row[]; brand: WeekPla
               <button type="button" style={{ background: "#efefef", color: "#000", border: "none", borderRadius: 8, padding: "7px 18px", fontWeight: 600, fontSize: 14, cursor: "default" }}>Message</button>
             </div>
             <div style={{ display: "flex", gap: 34, margin: "20px 0", fontSize: 15 }}>
-              <span><strong>{rows.length}</strong> posts</span>
-              <span><strong>{followers}</strong> followers</span>
-              <span><strong>{following}</strong> following</span>
+              <span><strong>{profile?.postsCount ?? rows.length}</strong> posts</span>
+              <span><strong>{followers ?? "—"}</strong> followers</span>
+              <span><strong>{following ?? "—"}</strong> following</span>
             </div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{brand?.name || "Your Brand"}</div>
             <div style={{ fontSize: 14, color: "#262626", lineHeight: 1.4, maxWidth: 460 }}>{brand?.mission || brand?.summary || ""}</div>
@@ -342,7 +345,7 @@ function InstagramProfile({ rows, brand, onPick }: { rows: Row[]; brand: WeekPla
         {/* grid */}
         {rows.length === 0 ? <EmptyFeed platform="instagram" /> : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4, paddingBottom: 40 }}>
-            {rows.map((r, i) => <GridTile key={i} row={r} brand={brand} onPick={onPick} />)}
+            {rows.map((r, i) => <GridTile key={i} row={r} brand={brand} onPick={onPick} hideStats={hideStats} />)}
           </div>
         )}
       </div>
@@ -385,7 +388,7 @@ function CommentsModal({ post, brand, onClose }: { post: RealPost; brand: WeekPl
         </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <PlatformPreview slot={postToSlot(post)} brand={brand} variant="card" timeLabel={relTime(post.createdAt) || "now"} />
+          <PlatformPreview slot={postToSlot(post)} brand={brand} variant="card" timeLabel={relTime(post.createdAt) || "now"} hideStats />
         </div>
 
         {/* comment thread */}
@@ -421,36 +424,48 @@ function CommentsModal({ post, brand, onClose }: { post: RealPost; brand: WeekPl
 
 // ════════════════════════════════════════════════════════════════════════════
 
-export function ChannelEnvironment({ platform, plan }: { platform: Platform; plan: WeekPlan }) {
+const PLATFORM_BG: Record<Platform, string> = { x: "#0f0f0f", linkedin: "#0a66c2", instagram: "#bc1888" };
+
+type Fetched = { posts: RealPost[]; profile: Profile; connected: boolean };
+
+export function ChannelEnvironment({ platform }: { platform: Platform; plan?: WeekPlan }) {
   const [picked, setPicked] = useState<Row | null>(null);
-  const [real, setReal] = useState<RealPost[] | null>(null); // null = loading
+  const [data, setData] = useState<Fetched | null>(null); // null = loading
 
   useEffect(() => {
     let alive = true;
-    setReal(null);
+    setData(null);
     fetch(`/api/posts?platform=${platform}`)
-      .then((r) => (r.ok ? r.json() : { posts: [] }))
-      .then((d) => alive && setReal(Array.isArray(d.posts) ? d.posts : []))
-      .catch(() => alive && setReal([]));
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d: any) => alive && setData({ posts: Array.isArray(d.posts) ? d.posts : [], profile: d.profile || null, connected: !!d.connected }))
+      .catch(() => alive && setData({ posts: [], profile: null, connected: false }));
     return () => { alive = false; };
   }, [platform]);
 
-  // Real published posts when we have them; otherwise the planned/demo week.
-  const usingReal = !!real && real.length > 0;
-  const rows: Row[] = usingReal
-    ? real!.map((p) => ({ slot: postToSlot(p), post: p }))
-    : plan.days.flatMap((d) => d.slots.filter((s) => s.platform === platform).map((s) => ({ slot: s, day: d })));
-
+  // EVERYTHING below is real API data only — no demo/fabricated content.
+  const profile = data?.profile || null;
+  const realBrand: WeekPlan["brand"] = {
+    name: profile?.displayName || profile?.username || "",
+    mission: profile?.bio || "",
+    voice: "",
+    summary: profile?.bio || "",
+    colors: [PLATFORM_BG[platform]],
+    logo: profile?.avatarUrl || undefined,
+  };
+  const rows: Row[] = (data?.posts || []).map((p) => ({ slot: postToSlot(p), post: p }));
   const onPick = (r: Row) => setPicked(r);
+
+  const mode = data === null ? "loading" : !data.connected ? "disconnected" : rows.length > 0 ? "live" : "empty";
+  const common = { rows, brand: realBrand, onPick, profile, hideStats: true as const };
 
   return (
     <div>
-      <EnvBar platform={platform} brand={plan.brand} mode={real === null ? "loading" : usingReal ? "live" : "preview"} />
-      {platform === "x" && <XTimeline rows={rows} brand={plan.brand} onPick={onPick} />}
-      {platform === "linkedin" && <LinkedInFeed rows={rows} brand={plan.brand} onPick={onPick} />}
-      {platform === "instagram" && <InstagramProfile rows={rows} brand={plan.brand} onPick={onPick} />}
-      {picked?.post && <CommentsModal post={picked.post} brand={plan.brand} onClose={() => setPicked(null)} />}
-      {picked && !picked.post && <Modal row={picked} brand={plan.brand} onClose={() => setPicked(null)} />}
+      <EnvBar platform={platform} brand={realBrand} mode={mode} />
+      {platform === "x" && <XTimeline {...common} />}
+      {platform === "linkedin" && <LinkedInFeed {...common} />}
+      {platform === "instagram" && <InstagramProfile {...common} />}
+      {picked?.post && <CommentsModal post={picked.post} brand={realBrand} onClose={() => setPicked(null)} />}
+      {picked && !picked.post && <Modal row={picked} brand={realBrand} onClose={() => setPicked(null)} />}
     </div>
   );
 }
