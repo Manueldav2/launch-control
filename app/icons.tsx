@@ -34,21 +34,15 @@ export function Ic({ name, size = 18, stroke = 1.7, className }:
   );
 }
 
-// Distinct brand mark — a liquid-glass clay orb (NOT an asterisk/star), so we
-// read as our own thing rather than claude.ai.
+// Brand mark — the Paradigm "P" logo.
 export function Mark({ size = 26 }: { size?: number }) {
   return (
     <span style={{
-      width: size, height: size, borderRadius: size * 0.32, flex: "0 0 auto", position: "relative",
-      display: "inline-block",
-      background: "radial-gradient(120% 120% at 30% 22%, #f2a988, var(--clay) 52%, #a84e2f)",
-      boxShadow: "inset 0 1.5px 1px rgba(255,255,255,0.75), inset 0 -3px 6px rgba(120,40,20,0.4), 0 6px 16px -6px rgba(189,93,58,0.6)",
-    }}>
-      <span style={{
-        position: "absolute", top: "16%", left: "20%", width: "44%", height: "30%", borderRadius: "50%",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.85), transparent)", filter: "blur(0.3px)",
-      }} />
-    </span>
+      display: "inline-block", flex: "0 0 auto",
+      width: Math.round(size * 1.12), height: size,
+      backgroundImage: "url(/paradigm_mark.png)",
+      backgroundSize: "contain", backgroundRepeat: "no-repeat", backgroundPosition: "center",
+    }} aria-label="Paradigm" />
   );
 }
 
