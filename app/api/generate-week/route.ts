@@ -4,12 +4,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWeekPlan } from "@/lib/anthropic";
 import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
+import { userIdFromRequest } from "@/lib/auth-server";
 import type { WeekInputs } from "@/lib/types";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
+    // Generation is gated on sign-in. Text (the week's copy) is unlimited for a
+    // signed-in account; media has a free quota (see /api/generate-media).
+    const userId = await userIdFromRequest(req);
+    if (!userId) return NextResponse.json({ error: "Create a free account to generate your launch week." }, { status: 401 });
+
     const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean; apiKey?: string };
     if (!body.goal || !body.cta || !body.website)
       return NextResponse.json({ error: "goal, cta, and website are required" }, { status: 400 });

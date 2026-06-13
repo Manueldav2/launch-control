@@ -6,7 +6,7 @@
 // with a single mount. The platform itself runs on the host's server keys, so
 // auth is only about saving and returning to YOUR projects.
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth } from "@/lib/use-auth";
 
 type ProjectRow = { id: string; title: string; inputs?: any; created_at: string };
@@ -29,6 +29,16 @@ export default function AuthBar({ plan, onLoadProject }: {
   }, [token]);
 
   useEffect(() => { if (user) loadProjects(); }, [user, loadProjects]);
+
+  // Triggers from elsewhere (the generate gate, the sidebar "My projects" link).
+  const userRef = useRef(user); useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => {
+    const openAuth = () => { setMode("login"); setOpen("auth"); };
+    const openProjects = () => { if (userRef.current) { setOpen("projects"); loadProjects(); } else { setMode("login"); setOpen("auth"); } };
+    window.addEventListener("lc:open-auth", openAuth);
+    window.addEventListener("lc:open-projects", openProjects);
+    return () => { window.removeEventListener("lc:open-auth", openAuth); window.removeEventListener("lc:open-projects", openProjects); };
+  }, [loadProjects]);
 
   async function submitAuth() {
     setBusy(true); setErr("");

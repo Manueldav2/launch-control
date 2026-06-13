@@ -13,6 +13,8 @@
 //
 // Exit 0 = ALL GREEN (acceptance passed). Exit 1 = a check failed.
 
+import { readFileSync } from "node:fs";
+
 const args = process.argv.slice(2);
 function flag(name, def) {
   const i = args.indexOf(`--${name}`);
@@ -49,6 +51,26 @@ async function fetchJSON(url, opts = {}, ms = 200000) {
 }
 const cityToken = (LOCATION.split(",")[0] || "").trim().toLowerCase();
 
+function envLocal(k) {
+  try {
+    for (const l of readFileSync(".env.local", "utf8").split("\n")) {
+      const i = l.indexOf("="); if (i > 0 && l.slice(0, i).trim() === k) return l.slice(i + 1).trim();
+    }
+  } catch { /* no .env.local */ }
+  return process.env[k] || "";
+}
+// Generation is gated on sign-in, so the harness creates a throwaway account and
+// returns its access token. Needs the (public) Supabase URL + anon key.
+async function bootstrapToken() {
+  const SB = envLocal("NEXT_PUBLIC_SUPABASE_URL") || envLocal("SUPABASE_URL");
+  const ANON = envLocal("NEXT_PUBLIC_SUPABASE_ANON_KEY") || envLocal("SUPABASE_ANON_KEY");
+  if (!SB || !ANON) return "";
+  const email = `verify.${Date.now()}@gmail.com`, password = "verifyharness123";
+  await fetchJSON(URL_BASE + "/api/auth/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) }, 30000);
+  const tok = await fetchJSON(`${SB}/auth/v1/token?grant_type=password`, { method: "POST", headers: { "Content-Type": "application/json", apikey: ANON }, body: JSON.stringify({ email, password }) }, 30000);
+  return tok.body?.access_token || "";
+}
+
 async function main() {
   console.log(`Launch Control acceptance — ${URL_BASE}`);
   console.log(`Problem under test: "${GOAL}" @ ${LOCATION} (${WEBSITE})`);
@@ -65,10 +87,18 @@ async function main() {
   check("connect offers all 4 channels", ["x", "linkedin", "instagram", "tiktok"].every((c) => connectKeys.includes(c)), connectKeys.join(","));
   check("at least one account connected", (conn.body?.accounts || []).length > 0, `${(conn.body?.accounts || []).length} connected`);
 
-  // ── 3. The week plans, writes, and SELF-GRADES green (Opus 4.8 + Impact) ────
-  section("3. Generate + self-grade a 7-day week (Opus 4.8 strategist + critic)");
+  // ── 3. Sign-in gate (production auth) ───────────────────────────────────────
+  section("3. Sign-in gate + free account");
+  const blocked = await fetchJSON(URL_BASE + "/api/generate-week", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal: GOAL, cta: CTA, website: WEBSITE }) }, 30000);
+  check("generation is blocked without sign-in (401)", blocked.status === 401, `status ${blocked.status}`);
+  const TOKEN = await bootstrapToken();
+  check("create a free account + sign in", !!TOKEN, TOKEN ? "got token" : "no token (set NEXT_PUBLIC_SUPABASE_*)");
+  const AUTH = TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+
+  // ── 4. The week plans, writes, and SELF-GRADES green (Opus 4.8 + Impact) ────
+  section("4. Generate + self-grade a 7-day week (Opus 4.8 strategist + critic)");
   const wk = await fetchJSON(URL_BASE + "/api/generate-week", {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json", ...AUTH },
     body: JSON.stringify({ goal: GOAL, cta: CTA, website: WEBSITE, location: LOCATION }),
   });
   const plan = wk.body?.plan;
@@ -87,27 +117,27 @@ async function main() {
   const tell = TELLS.find((t) => allCopy.includes(t));
   check("no AI-tells in any copy", !tell, tell ? `found "${tell}"` : "clean");
 
-  // ── 4. Weather-aware event mode (creative Opus use) ─────────────────────────
-  section("4. Event mode weather watch");
+  // ── 5. Weather-aware event mode (creative Opus use) ─────────────────────────
+  section("5. Event mode weather watch");
   const w = plan?.weather;
   check("forecast attached for the in-person event", !!w && typeof w.precipProb === "number" && !!w.weekday, w ? `${w.weekday}: ${w.condition} ${w.precipProb}%` : "no weather");
   check("recommendation is one of reschedule|rain_plan|proceed", !!w && ["reschedule", "rain_plan", "proceed"].includes(w.recommendation), w?.recommendation);
 
-  // ── 5. Media renders AND persists (not just text) ───────────────────────────
+  // ── 6. Media renders AND persists (not just text), within the free quota ────
   if (DO_MEDIA) {
-    section("5. Media is real (render + permanent store)");
+    section("6. Media is real (render + permanent store, free quota)");
     const m = await fetchJSON(URL_BASE + "/api/generate-media", {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json", ...AUTH },
       body: JSON.stringify({ contentType: "image", prompt: "a bright on-brand launch poster, clean modern type", location: LOCATION }),
     });
     check("POST /api/generate-media renders a url", m.status === 200 && !!m.body?.url, m.body?.error || (m.body?.url || "").slice(0, 50));
     check("media persisted to object storage", m.body?.persisted === true && String(m.body?.url || "").includes("supabase"), `persisted=${m.body?.persisted}`);
   } else {
-    section("5. Media check skipped (--no-media)");
+    section("6. Media check skipped (--no-media)");
   }
 
-  // ── 6. Distribution routing is correct (no real posts) ──────────────────────
-  section("6. Channel routing (safe — posts nothing)");
+  // ── 7. Distribution routing is correct (no real posts) ──────────────────────
+  section("7. Channel routing (safe — posts nothing)");
   // A UGC slot with no rendered media must route to IG+TikTok and be SKIPPED
   // (those channels require media), proving the routing + connect resolution
   // without publishing anything.

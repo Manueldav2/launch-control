@@ -7,6 +7,8 @@ import { WeatherWatchCard, LumaEventCard, LumaConnectModal, LumaMark } from "./E
 import type { WeatherWatch, LumaEvent } from "./EventControls";
 import { getLumaKey, setLumaKey } from "@/lib/client-luma";
 import { keyHeaders } from "@/lib/client-key";
+import { authHeader } from "@/lib/client-auth";
+import { useAuth } from "@/lib/use-auth";
 import PublishBar from "./PublishBar";
 import AuthBar from "./AuthBar";
 
@@ -52,6 +54,7 @@ const MISSION_PLACEHOLDERS = [
 ];
 
 export default function Home() {
+  const { user } = useAuth();
   const [goal, setGoal] = useState("");
   const [cta, setCta] = useState("");
   const [website, setWebsite] = useState("");
@@ -95,11 +98,12 @@ export default function Home() {
 
   async function runGenerate(weekday = eventWeekday) {
     if (!goal.trim()) { setErr("Tell the crew what you're trying to accomplish first."); return; }
+    if (!user) { setErr("Create a free account to generate your launch week."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-auth")); return; }
     setErr(""); setLoading(true); setPlan(null); setScorecard(null);
     setWeatherResolved(null); setLuma(null);
     try {
       const r = await fetch("/api/generate-week", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday }),
       });
       const d = await r.json();
@@ -173,11 +177,14 @@ export default function Home() {
     setMediaBusy(id); setErr("");
     try {
       const r = await fetch("/api/generate-media", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({ contentType: slot.contentType, prompt: slot.mediaPrompt || slot.copy,
-          brandColors: plan.brand?.colors, location: plan.inputs?.location || location }),
+          brandColors: plan.brand?.colors, location: plan.inputs?.location || location,
+          org: plan.brand?.name, day: plan.days[di].weekday, platform: slot.platform,
+          brand: plan.brand?.name, caption: (slot.copy || "").slice(0, 120), intent: slot.reaction }),
       });
       const d = await r.json();
+      if (r.status === 402) { setErr(d.error || "Free media limit reached."); setMediaBusy(null); return; }
       if (d.url) {
         const next = structuredClone(plan);
         next.days[di].slots[si].mediaUrl = d.url;
