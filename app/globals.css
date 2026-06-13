@@ -91,6 +91,25 @@ body::after {
 @keyframes scan { from { transform: translateY(-100%); } to { transform: translateY(1200%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes flamewob { 0%,100% { transform: scale(1) translateY(0); opacity: 0.8; } 50% { transform: scale(1.06) translateY(-2px); opacity: 1; } }
+/* engine exhaust embers drifting upward */
+@keyframes emberrise {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  10%  { opacity: var(--o, 0.5); }
+  90%  { opacity: var(--o, 0.5); }
+  100% { transform: translateY(-100vh) translateX(var(--dx, 0px)) scale(0.4); opacity: 0; }
+}
+/* charging-bar shimmer */
+@keyframes charge { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+/* horizontal sweep line on the overlay */
+@keyframes sweep { 0% { left: -30%; } 100% { left: 130%; } }
+/* overlay backdrop fade-in */
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+/* log line entrance */
+@keyframes logline { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
+/* gentle float for hero content tiles */
+@keyframes float1 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-14px) rotate(calc(var(--r,0deg) + 1.5deg)); } }
+@keyframes float2 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(12px) rotate(calc(var(--r,0deg) - 1.5deg)); } }
+@keyframes tilein { from { opacity: 0; transform: translateY(20px) scale(0.9) rotate(var(--r,0deg)); } to { opacity: 1; transform: translateY(0) scale(1) rotate(var(--r,0deg)); } }
 
 .rise { animation: rise 0.6s cubic-bezier(0.2,0.7,0.2,1) both; }
 

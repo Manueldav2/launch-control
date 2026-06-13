@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
+import { saveAsset } from "@/lib/assets-store";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -35,10 +37,25 @@ const CREW = [
   { id: "media", role: "MEDIA", station: "renders film + stills" },
 ];
 
+// One-click demo missions — also proves the engine reruns on any campaign.
+const EXAMPLES = [
+  { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Sign up at the link to join the cleanup", website: "https://www.surfrider.org" },
+  { label: "Food drive", goal: "Fill 500 holiday meal boxes by Saturday's food drive", cta: "Donate or volunteer at the link", website: "https://www.feedingamerica.org" },
+  { label: "Charity 5k", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org" },
+];
+const MISSION_PLACEHOLDERS = [
+  "Get 50 volunteers to our Saturday beach cleanup",
+  "Fill the food drive this weekend",
+  "Pack the start line of our charity 5k",
+  "Rally the neighborhood for the park restoration",
+];
+
 export default function Home() {
-  const [goal, setGoal] = useState("Get 50 volunteers to our Saturday beach cleanup");
-  const [cta, setCta] = useState("Sign up at the link to join the cleanup");
+  const [goal, setGoal] = useState("");
+  const [cta, setCta] = useState("");
   const [website, setWebsite] = useState("");
+  const [goalFocused, setGoalFocused] = useState(false);
+  const typed = useTypewriter(MISSION_PLACEHOLDERS, !goal && !goalFocused);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -82,6 +99,8 @@ export default function Home() {
         const next = structuredClone(plan);
         next.days[di].slots[si].mediaUrl = d.url;
         setPlan(next);
+        saveAsset({ url: d.url, contentType: slot.contentType, platform: slot.platform,
+          day: plan.days[di].weekday, brand: plan.brand?.name || "", caption: slot.copy.slice(0, 120) });
       } else setErr(d.error || "render failed");
     } catch (e: any) { setErr(String(e.message || e)); }
     setMediaBusy(null);
@@ -93,6 +112,8 @@ export default function Home() {
   return (
     <main style={{ position: "relative", zIndex: 2, maxWidth: 1180, margin: "0 auto", padding: "0 24px 120px" }}>
       <div className="grain" />
+      <EmberField />
+      {loading && <LaunchSequence goal={goal} website={website} />}
 
       {/* ── masthead ───────────────────────────────────────────────────── */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "26px 0 40px" }}>
@@ -102,7 +123,11 @@ export default function Home() {
             LAUNCH&nbsp;CONTROL
           </span>
         </div>
-        <span className="eyebrow">CLAUDE · OPUS&nbsp;4.8</span>
+        <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <span className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--ignite)" }}>CONSOLE</span>
+          <Link href="/assets" className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--faint)", textDecoration: "none" }}>ASSETS</Link>
+          <span className="eyebrow">CLAUDE · OPUS&nbsp;4.8</span>
+        </nav>
       </header>
 
       {/* ── hero ───────────────────────────────────────────────────────── */}
@@ -129,6 +154,7 @@ export default function Home() {
             agents plans seven days of content, writes it on-brand, films it, and
             grades its own work before a single post goes out.
           </p>
+          <FloatingTiles />
         </section>
       )}
 
@@ -144,9 +170,28 @@ export default function Home() {
             <span className="eyebrow">FLIGHT&nbsp;PARAMETERS</span>
             <span className="mono" style={{ fontSize: 11, color: "var(--faint)" }}>03&nbsp;REQUIRED</span>
           </div>
-          <Field n="01" label="MISSION OBJECTIVE" value={goal} onChange={setGoal} placeholder="What are you trying to accomplish?" />
+          <Field n="01" label="MISSION OBJECTIVE" value={goal} onChange={setGoal}
+            placeholder={typed || "What are you trying to accomplish?"}
+            onFocus={() => setGoalFocused(true)} onBlur={() => setGoalFocused(false)} />
           <Field n="02" label="CALL TO ACTION" value={cta} onChange={setCta} placeholder="What should people do?" />
           <Field n="03" label="TARGET SITE" value={website} onChange={setWebsite} placeholder="https://the-nonprofit.org" />
+
+          {/* one-click missions — fast demo + proves it reruns on any campaign */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
+            <span className="eyebrow" style={{ color: "var(--faint)" }}>TRY</span>
+            {EXAMPLES.map((ex) => (
+              <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); }}
+                className="mono" style={{
+                  fontSize: 11, letterSpacing: "0.04em", cursor: "pointer", color: "var(--muted)",
+                  background: "var(--void)", border: "1px solid var(--line)", borderRadius: 99, padding: "5px 12px",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--ignite)"; e.currentTarget.style.color = "var(--ember)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--line)"; e.currentTarget.style.color = "var(--muted)"; }}>
+                {ex.label}
+              </button>
+            ))}
+          </div>
 
           <button onClick={generate} disabled={loading} style={{
             marginTop: 22, width: "100%", border: 0, cursor: loading ? "default" : "pointer",
@@ -232,8 +277,9 @@ function Igniter({ live }: { live: boolean }) {
   );
 }
 
-function Field({ n, label, value, onChange, placeholder }:
-  { n: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Field({ n, label, value, onChange, placeholder, onFocus, onBlur }:
+  { n: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+    onFocus?: () => void; onBlur?: () => void }) {
   return (
     <label style={{ display: "block", marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
@@ -245,15 +291,61 @@ function Field({ n, label, value, onChange, placeholder }:
         borderRadius: 10, padding: "13px 14px", color: "var(--fg)", fontSize: 15,
         transition: "border-color 0.15s ease",
       }}
-        onFocus={(e) => (e.currentTarget.style.borderColor = "var(--ignite)")}
-        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--line)")} />
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--ignite)"; onFocus?.(); }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--line)"; onBlur?.(); }} />
     </label>
   );
+}
+
+// Cycling typewriter for the mission-objective placeholder — the AI-prompt feel.
+// Types a phrase, holds, deletes, advances. Pauses entirely when `active` is false.
+function useTypewriter(phrases: string[], active: boolean): string {
+  const [out, setOut] = useState("");
+  const st = useRef({ p: 0, i: 0, del: false });
+  useEffect(() => {
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const s = st.current;
+      const full = phrases[s.p % phrases.length];
+      if (!s.del) {
+        s.i++;
+        setOut(full.slice(0, s.i));
+        if (s.i >= full.length) { s.del = true; timer = setTimeout(tick, 1500); return; }
+        timer = setTimeout(tick, 38 + Math.random() * 40);
+      } else {
+        s.i--;
+        setOut(full.slice(0, Math.max(0, s.i)));
+        if (s.i <= 0) { s.del = false; s.p++; timer = setTimeout(tick, 300); return; }
+        timer = setTimeout(tick, 18);
+      }
+    };
+    timer = setTimeout(tick, 260);
+    return () => clearTimeout(timer);
+  }, [active, phrases]);
+  return active ? out : "";
+}
+
+// Count a number up from 0 — used so the GO tally "lands" on reveal.
+function useCountUp(target: number, ms = 700): number {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    let raf = 0; const start = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / ms);
+      setV(Math.round((1 - Math.pow(1 - p, 3)) * target));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return v;
 }
 
 function ReadinessBoard({ plan, scorecard, onReset }:
   { plan: Plan; scorecard: Scorecard; onReset: () => void }) {
   const allGo = scorecard.passing === scorecard.total;
+  const goCount = useCountUp(scorecard.passing);
   return (
     <section className="rise" style={{
       marginBottom: 22, border: `1px solid ${allGo ? "rgba(52,211,154,0.4)" : "var(--line)"}`,
@@ -268,7 +360,7 @@ function ReadinessBoard({ plan, scorecard, onReset }:
               fontSize: 38, fontWeight: 800, letterSpacing: "-0.02em",
               color: allGo ? "var(--go)" : "var(--hold)",
             }}>
-              {allGo ? "ALL SYSTEMS GO" : `${scorecard.passing}/${scorecard.total} GO`}
+              {allGo ? "ALL SYSTEMS GO" : `${goCount}/${scorecard.total} GO`}
             </span>
           </div>
           <p className="mono" style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
@@ -384,6 +476,199 @@ function SlotCard({ slot, busy, onRender, isVid }:
             {busy ? "▮ RENDERING…" : `▲ RENDER ${TYPE_LABEL[slot.contentType]}`}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── hero: floating content tiles suggesting the week of posts ────────────────
+function FloatingTiles() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // Edge-anchored so they frame the hero without crowding the headline.
+  const tiles = [
+    { p: "x", txt: "the tide doesn't clean itself. 9am Saturday. be there.", side: "left", top: 4, rot: -7, anim: "float1", dur: 7, delay: 0.9, type: "TEXT" },
+    { p: "instagram", txt: "before / after — one morning, one beach", side: "left", top: 56, rot: 5, anim: "float2", dur: 8.5, delay: 1.1, type: "STILL" },
+    { p: "linkedin", txt: "Why our team blocks off Saturday mornings for the coast.", side: "right", top: 8, rot: 6, anim: "float2", dur: 7.6, delay: 1.0, type: "TEXT" },
+    { p: "instagram", txt: "60 sec: what 80 volunteers pulled off the sand", side: "right", top: 58, rot: -5, anim: "float1", dur: 9, delay: 1.25, type: "UGC FILM" },
+  ];
+  if (!mounted) return null;
+  return (
+    <div aria-hidden style={{ position: "absolute", inset: 0, zIndex: -1, pointerEvents: "none" }}>
+      {tiles.map((t, i) => (
+        <div key={i} style={{
+          position: "absolute", top: `${t.top}%`,
+          [t.side]: "min(2vw, 12px)" as any,
+          width: 188, ["--r" as any]: `${t.rot}deg`,
+          animation: `tilein 0.7s cubic-bezier(0.16,1,0.3,1) ${t.delay}s both, ${t.anim} ${t.dur}s ease-in-out ${t.delay + 0.7}s infinite`,
+        }}>
+          <div style={{
+            background: "linear-gradient(180deg, rgba(22,22,30,0.9), rgba(13,13,18,0.9))",
+            border: "1px solid var(--line)", borderRadius: 12, padding: "11px 12px",
+            boxShadow: "0 24px 50px -24px rgba(0,0,0,0.8)", backdropFilter: "blur(6px)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7, color: "var(--faint)" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--muted)" }}>
+                <PlatformGlyph p={t.p} />
+                <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.08em" }}>{PLATFORM_LABEL[t.p]}</span>
+              </span>
+              <span className="mono" style={{ fontSize: 7.5, letterSpacing: "0.08em", border: "1px solid var(--line-bright)", borderRadius: 4, padding: "1px 5px" }}>{t.type}</span>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.45, color: "var(--fg)", textAlign: "left", opacity: 0.85 }}>{t.txt}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 8 }}>
+              <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--go)", boxShadow: "0 0 6px var(--go)" }} />
+              <span className="mono" style={{ fontSize: 8, letterSpacing: "0.1em", color: "var(--go)" }}>GO</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── atmosphere: engine embers drifting up like exhaust ────────────────────────
+function EmberField() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const embers = useMemo(() => {
+    // deterministic so there's no SSR/client mismatch
+    let s = 7;
+    const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+    return Array.from({ length: 34 }, () => ({
+      left: rnd() * 100,
+      size: 1 + rnd() * 2.5,
+      dur: 9 + rnd() * 12,
+      delay: -rnd() * 18,
+      dx: (rnd() - 0.5) * 80,
+      o: 0.25 + rnd() * 0.5,
+    }));
+  }, []);
+  if (!mounted) return null;
+  return (
+    <div aria-hidden style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" }}>
+      {embers.map((e, i) => (
+        <span key={i} style={{
+          position: "absolute", bottom: -10, left: `${e.left}%`,
+          width: e.size, height: e.size, borderRadius: 99,
+          background: i % 5 === 0 ? "var(--ignite-2)" : "var(--ignite)",
+          boxShadow: `0 0 ${e.size * 3}px var(--ignite)`,
+          ["--dx" as any]: `${e.dx}px`, ["--o" as any]: e.o,
+          animation: `emberrise ${e.dur}s linear ${e.delay}s infinite`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ─── the launch sequence: a cinematic takeover while the swarm works ───────────
+const SEQ_PHASES = [
+  "ACQUIRE TARGET", "PLOT 7-DAY ARC", "DRAFT ALL CHANNELS",
+  "CRITIC · GRADE", "CRITIC · CORRECT", "FINALIZE",
+];
+
+function LaunchSequence({ goal, website }: { goal: string; website: string }) {
+  const host = (() => { try { return new URL(website.startsWith("http") ? website : `https://${website}`).host; } catch { return website || "target"; } })();
+  const SCRIPT = useMemo(() => [
+    `establishing uplink to ${host || "target"}`,
+    "reading mission brief",
+    `objective locked · "${goal.slice(0, 46)}${goal.length > 46 ? "…" : ""}"`,
+    "strategist: locking the 7-day arc to the event",
+    "x-writer · linkedin-writer · instagram-writer drafting in parallel",
+    "critic: scanning every draft for AI-tells + fabrication",
+    "critic: flagged a hype phrase on day 3 — rewriting",
+    "critic: re-grade → GO",
+    "media: prepping render prompts",
+    "compiling launch readiness…",
+  ], [goal, host]);
+
+  const [phase, setPhase] = useState(0);
+  const [lines, setLines] = useState<string[]>([]);
+  const [pct, setPct] = useState(6);
+  const logRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const ph = setInterval(() => setPhase((p) => Math.min(p + 1, SEQ_PHASES.length - 1)), 1500);
+    let i = 0;
+    const lg = setInterval(() => {
+      if (i < SCRIPT.length) { setLines((l) => [...l, SCRIPT[i]]); i++; }
+    }, 620);
+    // asymptotic charge toward ~93% (completes for real when the overlay unmounts)
+    const ch = setInterval(() => setPct((p) => p + (93 - p) * 0.08), 140);
+    return () => { clearInterval(ph); clearInterval(lg); clearInterval(ch); };
+  }, [SCRIPT]);
+
+  useEffect(() => { logRef.current?.scrollTo({ top: 1e6 }); }, [lines]);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 50, animation: "fadein 0.3s ease both",
+      background: "radial-gradient(900px 600px at 50% 35%, rgba(255,106,26,0.10), rgba(8,8,11,0.92) 70%)",
+      backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+    }}>
+      <div style={{
+        width: "min(720px, 94vw)", border: "1px solid var(--line-bright)", borderRadius: 18,
+        background: "linear-gradient(180deg, rgba(17,17,24,0.96), rgba(8,8,11,0.96))",
+        boxShadow: "0 60px 160px -50px rgba(0,0,0,0.9), 0 0 80px -40px rgba(255,106,26,0.5)",
+        padding: 26, position: "relative", overflow: "hidden",
+      }}>
+        {/* sweep line */}
+        <span style={{ position: "absolute", top: 0, width: "30%", height: 2, background: "linear-gradient(90deg, transparent, var(--ignite), transparent)", animation: "sweep 2.4s linear infinite" }} />
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <span className="eyebrow" style={{ color: "var(--ignite)" }}>● LAUNCH SEQUENCE RUNNING</span>
+          <span className="mono" style={{ fontSize: 12, color: "var(--muted)" }}>{Math.round(pct)}%</span>
+        </div>
+
+        <h2 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 4px" }}>
+          The crew is building your week.
+        </h2>
+        <p className="mono" style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 20px" }}>
+          plan → draft → grade → correct · nothing ships until the critic says GO
+        </p>
+
+        {/* charging bar */}
+        <div style={{ height: 8, borderRadius: 99, background: "var(--void)", border: "1px solid var(--line)", overflow: "hidden", marginBottom: 22 }}>
+          <div style={{
+            width: `${pct}%`, height: "100%", borderRadius: 99,
+            background: "linear-gradient(90deg, var(--ignite), var(--ember), var(--ignite))",
+            backgroundSize: "200% 100%", animation: "charge 1.4s linear infinite",
+            transition: "width 0.2s ease", boxShadow: "0 0 16px var(--ignite)",
+          }} />
+        </div>
+
+        {/* phase rail */}
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${SEQ_PHASES.length}, 1fr)`, gap: 6, marginBottom: 20 }}>
+          {SEQ_PHASES.map((ph, i) => {
+            const done = i < phase, active = i === phase;
+            return (
+              <div key={ph} style={{ textAlign: "center" }}>
+                <div style={{
+                  height: 3, borderRadius: 2, marginBottom: 7,
+                  background: done ? "var(--go)" : active ? "var(--ignite)" : "var(--line-bright)",
+                  boxShadow: active ? "0 0 10px var(--ignite)" : "none",
+                  animation: active ? "glowpulse 1s ease-in-out infinite" : "none",
+                }} />
+                <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.06em", color: done ? "var(--go)" : active ? "var(--fg)" : "var(--faint)" }}>{ph}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* telemetry log */}
+        <div ref={logRef} style={{
+          height: 132, overflow: "hidden", background: "var(--void)", border: "1px solid var(--line)",
+          borderRadius: 10, padding: "10px 13px",
+        }}>
+          {lines.map((l, i) => (
+            <div key={i} className="mono" style={{
+              fontSize: 11.5, lineHeight: 1.7, color: i === lines.length - 1 ? "var(--ember)" : "var(--muted)",
+              animation: "logline 0.25s ease both",
+            }}>
+              <span style={{ color: "var(--ignite)" }}>›</span> {l}
+            </div>
+          ))}
+          <span className="mono" style={{ fontSize: 11.5, color: "var(--ignite)", animation: "blink 1s steps(1) infinite" }}>▋</span>
+        </div>
       </div>
     </div>
   );
