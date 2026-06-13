@@ -375,9 +375,10 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h", variant = "card", hide
   const name = brand?.name || "Your Brand";
   const subtitle =
     (brand?.summary && brand.summary.split(/[.\n]/)[0].trim().slice(0, 64)) ||
-    brand?.voice ||
-    "Nonprofit organization";
-  const followers = compact(seedNum(name, 1200, 48000));
+    (hideStats ? "" : brand?.voice || "Nonprofit organization");
+  // Real posts (hideStats) have no reliable follower count from the API, so we
+  // don't fabricate one.
+  const followers = hideStats ? null : compact(seedNum(name, 1200, 48000));
   const [open, setOpen] = useState(false);
   const long = slot.copy.length > 180;
   const body = long && !open ? slot.copy.slice(0, 180).trimEnd() : slot.copy;
@@ -404,11 +405,13 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h", variant = "card", hide
         <Avatar brand={brand} size={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{name}</div>
-          <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {followers} followers
-          </div>
+          {followers && (
+            <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {followers} followers
+            </div>
+          )}
           <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 4 }}>
-            {subtitle} · {timeLabel} ·
+            {subtitle ? `${subtitle} · ` : ""}{timeLabel} ·
             <svg width="13" height="13" viewBox="0 0 24 24" fill={LI.muted} aria-hidden><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm6.9 9h-3a15 15 0 00-.9-4.3A8 8 0 0118.9 11zM12 4c.8 1 1.6 2.7 1.9 5h-3.8C10.4 6.7 11.2 5 12 4zM4.3 13h3a15 15 0 00.9 4.3A8 8 0 014.3 13zm3-2h-3a8 8 0 013.9-2.3 15 15 0 00-.9 2.3zm2.8 6h3.8c-.3 2.3-1.1 4-1.9 5-.8-1-1.6-2.7-1.9-5zm5.6 0h3a8 8 0 01-3.9 2.3 15 15 0 00.9-2.3z"/></svg>
           </div>
         </div>

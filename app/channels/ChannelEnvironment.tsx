@@ -158,7 +158,7 @@ function Modal({ row, brand, onClose }: { row: Row; brand: WeekPlan["brand"]; on
   );
 }
 
-function EmptyFeed({ platform, dark }: { platform: Platform; dark?: boolean }) {
+function EmptyFeed({ platform, dark }: { platform: string; dark?: boolean }) {
   return (
     <div style={{ padding: "60px 24px", textAlign: "center", color: dark ? "#71767b" : "var(--muted)", fontSize: 14 }}>
       No {PLATFORM_LABEL[platform]} posts to show yet.
@@ -426,6 +426,68 @@ function CommentsModal({ post, brand, onClose }: { post: RealPost; brand: WeekPl
 
 const PLATFORM_BG: Record<string, string> = { x: "#0f0f0f", linkedin: "#0a66c2", instagram: "#bc1888", tiktok: "#000000" };
 
+// ════════════════════════════════════════════════════════════════════════════
+// TikTok profile + video grid (native skin)
+// ════════════════════════════════════════════════════════════════════════════
+
+function TikTokTile({ row, brand, onPick }: { row: Row; brand: WeekPlan["brand"]; onPick: (r: Row) => void }) {
+  const { slot } = row;
+  const hasVid = isVideo(slot.contentType) && slot.mediaUrl;
+  return (
+    <div onClick={() => onPick(row)} style={{ position: "relative", aspectRatio: "9 / 16", overflow: "hidden", cursor: "pointer", background: "#111", borderRadius: 4 }}>
+      {slot.mediaUrl ? (
+        hasVid ? <video src={slot.mediaUrl} muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+               : <img src={slot.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <div style={{ width: "100%", height: "100%", background: `linear-gradient(160deg, ${brandColor(brand, "#25F4EE")}, #000)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+          <span style={{ color: "#fff", fontSize: 12, fontWeight: 600, textAlign: "center", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", opacity: 0.92 }}>{slot.copy}</span>
+        </div>
+      )}
+      <span style={{ position: "absolute", bottom: 6, left: 6, display: "flex", alignItems: "center", gap: 4, color: "#fff", fontSize: 11, fontWeight: 600, textShadow: "0 1px 4px rgba(0,0,0,0.6)" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>
+      </span>
+    </div>
+  );
+}
+
+function TikTokProfile({ rows, brand, onPick, profile }: { rows: Row[]; brand: WeekPlan["brand"]; onPick: (r: Row) => void; profile?: Profile }) {
+  const font = '-apple-system,system-ui,"Segoe UI",Roboto,sans-serif';
+  const handle = profile?.username || handleFromName(brand?.name || "");
+  const followers = profile?.followers != null ? compact(profile.followers) : "—";
+  const following = profile?.following != null ? compact(profile.following) : "—";
+  return (
+    <div style={{ background: "#fff", minHeight: "calc(100vh - 42px)", fontFamily: font, color: "#161823" }}>
+      <div style={{ maxWidth: 624, margin: "0 auto", padding: "30px 20px 0" }}>
+        <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ width: 116, height: 116, borderRadius: "50%", background: brandColor(brand, "#000"), color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 42, overflow: "hidden", flexShrink: 0 }}>
+            {brand?.logo ? <img src={brand.logo} alt="" referrerPolicy="no-referrer" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials(brand?.name || "")}
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 26, fontWeight: 700 }}>{handle}</div>
+            <div style={{ fontSize: 16, marginTop: 2 }}>{brand?.name || ""}</div>
+            <div style={{ display: "flex", gap: 22, margin: "12px 0", fontSize: 15 }}>
+              <span><strong>{following}</strong> <span style={{ color: "#666" }}>Following</span></span>
+              <span><strong>{followers}</strong> <span style={{ color: "#666" }}>Followers</span></span>
+              <span><strong>{rows.length}</strong> <span style={{ color: "#666" }}>Posts</span></span>
+            </div>
+            {(brand?.mission || brand?.summary) && <div style={{ fontSize: 14, color: "#161823" }}>{brand?.mission || brand?.summary}</div>}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center", borderBottom: "1px solid #e3e3e4", marginTop: 24 }}>
+          <div style={{ padding: "12px 0", borderBottom: "2px solid #161823", fontSize: 14, fontWeight: 700, letterSpacing: 0.3 }}>Videos</div>
+        </div>
+
+        {rows.length === 0 ? <EmptyFeed platform="tiktok" /> : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: "16px 0 40px" }}>
+            {rows.map((r, i) => <TikTokTile key={i} row={r} brand={brand} onPick={onPick} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type Fetched = { posts: RealPost[]; profile: Profile; connected: boolean };
 
 export function ChannelEnvironment({ platform }: { platform: Platform | "tiktok"; plan?: WeekPlan }) {
@@ -463,7 +525,8 @@ export function ChannelEnvironment({ platform }: { platform: Platform | "tiktok"
       <EnvBar platform={platform} brand={realBrand} mode={mode} />
       {platform === "x" && <XTimeline {...common} />}
       {platform === "linkedin" && <LinkedInFeed {...common} />}
-      {(platform === "instagram" || platform === "tiktok") && <InstagramProfile {...common} />}
+      {platform === "instagram" && <InstagramProfile {...common} />}
+      {platform === "tiktok" && <TikTokProfile {...common} />}
       {picked?.post && <CommentsModal post={picked.post} brand={realBrand} onClose={() => setPicked(null)} />}
       {picked && !picked.post && <Modal row={picked} brand={realBrand} onClose={() => setPicked(null)} />}
     </div>
