@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Ic, Mark, PlatformGlyph } from "./icons";
+import { savePlanLocal } from "./calendar/plan-store";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -53,6 +54,7 @@ export default function Home() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "launch sequence failed");
       setPlan(d.plan); setScorecard(d.scorecard);
+      savePlanLocal(d.plan); // flow the live week into /calendar + /channels
     } catch (e: any) { setErr(String(e.message || e)); }
     setLoading(false);
   }
@@ -102,6 +104,7 @@ export default function Home() {
         const next = structuredClone(plan);
         next.days[di].slots[si].mediaUrl = d.url;
         setPlan(next);
+        savePlanLocal(next); // keep calendar/channels in sync with rendered media
         const { saveAsset } = await import("@/lib/assets-store");
         saveAsset({ url: d.url, contentType: slot.contentType, platform: slot.platform,
           day: plan.days[di].weekday, brand: plan.brand?.name || "", caption: slot.copy.slice(0, 120) });

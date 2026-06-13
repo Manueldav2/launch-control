@@ -102,6 +102,12 @@ export default function Sidebar() {
         <Link href="/assets" className="nav-item" data-active={onAssets}>
           <span className="nav-ico"><Ic name="layers" /></span> Asset Bay
         </Link>
+        <Link href="/calendar" className="nav-item" data-active={path.startsWith("/calendar")}>
+          <span className="nav-ico"><Ic name="calendar" /></span> Calendar
+        </Link>
+        <Link href="/channels" className="nav-item" data-active={path === "/channels"}>
+          <span className="nav-ico"><Ic name="broadcast" /></span> Channels
+        </Link>
       </nav>
 
       <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "6px 10px 0" }}>
@@ -142,13 +148,13 @@ export default function Sidebar() {
 
         <div className="side-label" style={{ marginTop: 8 }}>Channels</div>
         {CHANNELS.map((c) => (
-          <div key={c.p} className="nav-item" style={{ cursor: "default" }}>
+          <Link key={c.p} href={`/channels/${c.p}`} className="nav-item" data-active={path === `/channels/${c.p}`} title={`Preview ${c.label}`}>
             <span className="nav-ico" style={{ color: "var(--muted)" }}><PlatformGlyph p={c.p} size={15} /></span>
             <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flex: 1 }}>
               {c.label}
               <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--border-strong)" }} />
             </span>
-          </div>
+          </Link>
         ))}
         <div style={{ padding: "4px 8px 12px" }}>
           <button onClick={() => window.open("/api/connect", "_blank")} className="glass-btn" style={{
