@@ -62,6 +62,7 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
             brandColors: plan.brand?.colors, location: plan.inputs?.location,
             org: plan.brand?.name || "demo", planId: plan.createdAt || "", slot: `${day.weekday}:${s.platform}`,
             day: day.weekday, platform: s.platform, brand: plan.brand?.name, caption: (s.copy || "").slice(0, 120),
+            review: true, // reviewer grades each render and auto-regenerates if it looks bad
           }),
         });
         const d = await r.json();

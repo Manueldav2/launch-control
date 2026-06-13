@@ -78,19 +78,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hand off to the review pipeline: copy bytes to Supabase Storage + enqueue a
-    // pending_review asset the partner's reviewer claims. No DB → no-op, the fal
-    // url is returned as-is.
+    // Visual review + AUTO-REGENERATE: when review is on, Opus LOOKS at the
+    // render; if it fails, we re-render with the critic's concrete fixes folded
+    // into the prompt and re-grade, up to a couple of attempts, keeping the last.
+    // This is the reviewer regenerating bad graphics on its own.
+    let visualGrade: any = null;
+    const autofixTrail: any[] = [];
+    if (review && stillUrl) {
+      const MAX_AUTOFIX = isVideo ? 1 : 2; // video re-renders are pricey, cap lower
+      let attempt = 0;
+      let curPrompt = prompt;
+      visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
+      autofixTrail.push({ attempt, pass: visualGrade.pass, issues: visualGrade.issues });
+      while (!visualGrade.pass && attempt < MAX_AUTOFIX) {
+        attempt++;
+        const fixes = [visualGrade.notes, ...(visualGrade.issues || [])].filter(Boolean).join("; ");
+        curPrompt = `${prompt}\n\nThe previous render was REJECTED by visual review for: ${fixes}. Fix these specifically. Keep it on-brand and clean (no garbled text or artifacts).`;
+        const reRender = () => renderMedia({ contentType, prompt: curPrompt, intent, brandColors: colors, location, imageUrl });
+        try {
+          ({ url, stillUrl } = usingOwnKey ? await runWithKeys({ FAL_KEY: userFalKey }, reRender) : await reRender());
+        } catch { break; }
+        visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
+        autofixTrail.push({ attempt, pass: visualGrade.pass, issues: visualGrade.issues });
+      }
+    }
+
+    // Persist the FINAL (best) render + enqueue a pending_review asset for the
+    // partner's reviewer. No DB → no-op, the fal url is returned as-is.
     const queued = await enqueueAsset({
       url, contentType, org: org || userId, platform, day, brand, caption, slot, planId,
       prompt, intent, brandColors: colors, location, posterUrl: stillUrl,
     });
-
-    // Optional inline visual review (the existing review=true hook).
-    let visualGrade = null;
-    if (review && stillUrl) {
-      visualGrade = await critiqueVisual({ imageUrl: stillUrl, intent: intent || prompt, brandColors: colors, apiKey });
-    }
 
     return NextResponse.json({
       url: queued.publicUrl,
@@ -100,6 +118,7 @@ export async function POST(req: NextRequest) {
       queued: !!queued.id,
       persisted: queued.persisted,
       visualGrade,
+      autofix: autofixTrail.length ? { attempts: autofixTrail.length - 1, finalPass: !!visualGrade?.pass, trail: autofixTrail } : undefined,
       spentUsd: spentSoFar(),
     });
   } catch (e: any) {
