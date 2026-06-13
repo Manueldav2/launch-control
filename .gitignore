@@ -9,3 +9,7 @@ out/
 .vercel
 /tmp
 dist/
+
+# build artifacts
+next-env.d.ts
+*.tsbuildinfo

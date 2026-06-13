@@ -1,18 +1,108 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #0a0a0b;
-  --panel: #141416;
-  --border: #26262b;
-  --fg: #ededef;
-  --muted: #9a9aa3;
-  --accent: #f97316;
-}
+/* ─── Launch Control — mission console aesthetic ─────────────────────────────
+   Deep space near-black, ignition orange, telemetry mono. Atmosphere from a
+   faint grid, an engine glow behind the title, and a grain overlay. ───────── */
 
-html, body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+:root {
+  --void: #08080b;
+  --void-2: #0d0d12;
+  --panel: #111118;
+  --panel-2: #16161e;
+  --line: #23232e;
+  --line-bright: #32323f;
+  --fg: #f2f0ee;
+  --muted: #8a8a99;
+  --faint: #5a5a68;
+
+  --ignite: #ff6a1a;     /* primary — engine ignition orange */
+  --ignite-2: #ff8c42;   /* lighter flame */
+  --ember: #ffb27a;      /* warm highlight */
+  --go: #34d39a;         /* GO / passed */
+  --abort: #ff4d5e;      /* abort / failed */
+  --hold: #ffc24b;       /* hold / in progress */
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SF Mono", monospace;
 }
 
 * { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--void);
+  color: var(--fg);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* The whole stage: a deep radial vignette + a faint engineering grid. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 700px at 50% -10%, rgba(255,106,26,0.10), transparent 60%),
+    radial-gradient(900px 900px at 100% 110%, rgba(255,140,66,0.05), transparent 55%),
+    linear-gradient(180deg, var(--void) 0%, var(--void-2) 100%);
+  pointer-events: none;
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
+  pointer-events: none;
+}
+
+/* Grain overlay for texture. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Type primitives */
+.mono { font-family: var(--font-mono); }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Animations */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes glowpulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.25; } }
+@keyframes scan { from { transform: translateY(-100%); } to { transform: translateY(1200%); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes flamewob { 0%,100% { transform: scale(1) translateY(0); opacity: 0.8; } 50% { transform: scale(1.06) translateY(-2px); opacity: 1; } }
+
+.rise { animation: rise 0.6s cubic-bezier(0.2,0.7,0.2,1) both; }
+
+/* Inputs */
+input, textarea {
+  font-family: var(--font-display);
+}
+input:focus, textarea:focus { outline: none; }
+
+::selection { background: rgba(255,106,26,0.32); color: #fff; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
