@@ -10,6 +10,7 @@ import { resolveProfileId, listAccounts } from "@/lib/zernio";
 
 const BASE = process.env.ZERNIO_BASE_URL || "https://zernio.com/api";
 const TO_ZERNIO: Record<string, string> = { x: "twitter", linkedin: "linkedin", instagram: "instagram", facebook: "facebook", tiktok: "tiktok" };
+const FROM_ZERNIO: Record<string, string> = { twitter: "x", linkedin: "linkedin", instagram: "instagram", facebook: "facebook", tiktok: "tiktok" };
 
 function authHeaders(): Record<string, string> {
   const k = process.env.ZERNIO_API_KEY;
@@ -42,6 +43,8 @@ function buildProfile(a: any) {
 
 function normalize(p: any, channel: string, accountId: string) {
   const { mediaUrl, mediaType } = pickMedia(p);
+  const status = p.status || "published";
+  const scheduledFor = p.scheduledFor || null;
   return {
     id: String(p.id || p._id || p.postId || ""),
     platform: channel,
@@ -49,6 +52,10 @@ function normalize(p: any, channel: string, accountId: string) {
     text: p.text || p.content || p.caption || p.message || "",
     mediaUrl,
     mediaType,
+    status,
+    scheduledFor,
+    // The date this post lives on: when it went out, or when it's scheduled to.
+    date: p.publishedAt || scheduledFor || p.createdAt || p.created_at || null,
     createdAt: p.createdAt || p.created_at || p.publishedAt || p.date || null,
     metrics: p.metrics || p.stats || p.insights || null,
   };
@@ -73,12 +80,40 @@ async function fetchPosts(profileId: string, accountId: string): Promise<any[]> 
   return [];
 }
 
+async function fetchScheduled(accountId: string): Promise<any[]> {
+  try {
+    const r = await fetch(`${BASE}/v1/posts?accountId=${encodeURIComponent(accountId)}&status=scheduled`, { headers: authHeaders() });
+    if (!r.ok) return [];
+    const j = await r.json();
+    const arr = j.posts || j.data || [];
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
     const platform = sp.get("platform") || "";
     let accountId = sp.get("accountId") || "";
     const profileId = await resolveProfileId();
+
+    // Calendar mode: every connected account's published + scheduled posts,
+    // each tagged with its platform + status, for laying out on dates.
+    if (sp.get("all") === "1") {
+      const accounts = await listAccounts(profileId);
+      const out: any[] = [];
+      await Promise.all(
+        accounts.map(async (a: any) => {
+          const aid = a.accountId || a._id || a.id;
+          if (!aid) return;
+          const channel = FROM_ZERNIO[a.platform] || a.platform;
+          const [pub, sched] = await Promise.all([fetchPosts(profileId, aid), fetchScheduled(aid)]);
+          for (const p of [...pub, ...sched]) out.push(normalize(p, channel, aid));
+        })
+      );
+      const posts = out.filter((p) => p.id).sort((x, y) => (x.date && y.date ? +new Date(x.date) - +new Date(y.date) : 0));
+      return NextResponse.json({ posts, connected: accounts.length > 0 });
+    }
 
     let match: any = null;
     const accounts = await listAccounts(profileId);

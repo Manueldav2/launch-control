@@ -8,9 +8,10 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { ContentSlot, DayPlan, WeekPlan, Platform } from "@/lib/types";
 import { PlatformPreview } from "../previews/PlatformPreview";
-import { loadPlanLocal, DEMO_WEEK } from "./plan-store";
+import { loadPlanLocal } from "./plan-store";
 
 const PLATFORM_META: Record<Platform, { label: string; color: string; glyph: React.ReactNode }> = {
   x: {
@@ -44,8 +45,8 @@ const LENS: Array<{ key: "all" | Platform; label: string }> = [
   { key: "instagram", label: "Instagram" },
 ];
 
-function PlatformDot({ platform, size = 22 }: { platform: Platform; size?: number }) {
-  const m = PLATFORM_META[platform];
+function PlatformDot({ platform, size = 22 }: { platform: Platform | string; size?: number }) {
+  const m = PLATFORM_META[platform as Platform] || { label: String(platform), color: "#555", glyph: <span style={{ color: "#fff", fontSize: size * 0.42, fontWeight: 700 }}>{String(platform)[0]?.toUpperCase()}</span> };
   return (
     <span
       style={{
@@ -205,11 +206,13 @@ function PreviewModal({
   day,
   brand,
   onClose,
+  hideStats,
 }: {
   slot: ContentSlot;
   day: DayPlan;
   brand: WeekPlan["brand"];
   onClose: () => void;
+  hideStats?: boolean;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -253,7 +256,7 @@ function PreviewModal({
         </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <PlatformPreview slot={slot} brand={brand} />
+          <PlatformPreview slot={slot} brand={brand} hideStats={hideStats} />
         </div>
 
         {slot.grade && !slot.grade.pass && slot.grade.failures.length > 0 && (
@@ -266,26 +269,115 @@ function PreviewModal({
   );
 }
 
-export default function CalendarPage() {
-  const [plan, setPlan] = useState<WeekPlan | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
-  const [lens, setLens] = useState<"all" | Platform>("all");
-  const [picked, setPicked] = useState<{ slot: ContentSlot; day: DayPlan } | null>(null);
+// ── real posts (published + scheduled, from Zernio via /api/posts?all=1) ──────
+type RealPost = { id: string; platform: string; accountId: string; text: string; mediaUrl?: string; mediaType?: string; status?: string; scheduledFor?: string | null; date?: string | null; createdAt?: string | null };
 
-  useEffect(() => {
-    const live = loadPlanLocal();
-    if (live) setPlan(live);
-  }, []);
+const norm = (s: string) => (s || "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 50);
+function fmtDate(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+function postSlot(p: RealPost, reaction = ""): ContentSlot {
+  const contentType = (p.mediaType === "video" ? "ugc_video" : p.mediaUrl ? "image" : "text") as ContentSlot["contentType"];
+  return { platform: p.platform as ContentSlot["platform"], reaction, contentType, copy: p.text, mediaUrl: p.mediaUrl };
+}
 
-  const showDemo = () => {
-    setPlan(DEMO_WEEK);
-    setIsDemo(true);
+// "Why" lookup: map each planned slot's copy -> its reasoning, so a published
+// post can show the strategy it came from.
+function buildWhy(plan: WeekPlan | null): Map<string, { reaction: string; theme: string; cta: string }> {
+  const m = new Map<string, { reaction: string; theme: string; cta: string }>();
+  if (!plan) return m;
+  for (const d of plan.days) for (const s of d.slots) m.set(norm(s.copy), { reaction: s.reaction, theme: d.theme, cta: d.cta });
+  return m;
+}
+
+function RealRow({ post, why, onPick }: { post: RealPost; why?: { reaction: string; theme: string; cta: string }; onPick: () => void }) {
+  const meta = PLATFORM_META[post.platform as Platform];
+  const scheduled = post.status === "scheduled";
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      style={{ display: "flex", gap: 12, width: "100%", textAlign: "left", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, cursor: "pointer", marginBottom: 10 }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--clay)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+    >
+      <PlatformDot platform={post.platform as Platform} size={28} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>{meta?.label || post.platform}</span>
+          <span style={{ fontSize: 11, color: "var(--faint)" }}>{fmtDate(post.date)}</span>
+          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: scheduled ? "var(--clay-bg)" : "var(--go-bg)", color: scheduled ? "var(--clay-deep)" : "var(--go)" }}>
+            {scheduled ? "Scheduled" : "Published"}
+          </span>
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.text}</div>
+        {why?.reaction && (
+          <div style={{ fontSize: 11.5, color: "var(--clay-deep)", fontStyle: "italic", marginTop: 5 }}>
+            Why: {why.reaction}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function RealTimeline({ posts, lens, plan, onPick }: { posts: RealPost[]; lens: "all" | Platform; plan: WeekPlan | null; onPick: (slot: ContentSlot, day: DayPlan) => void }) {
+  const why = buildWhy(plan);
+  const shown = posts.filter((p) => lens === "all" || p.platform === lens);
+  const scheduled = shown.filter((p) => p.status === "scheduled").sort((a, b) => +new Date(a.date || 0) - +new Date(b.date || 0));
+  const published = shown.filter((p) => p.status !== "scheduled").sort((a, b) => +new Date(b.date || 0) - +new Date(a.date || 0));
+
+  const pick = (p: RealPost) => {
+    const w = why.get(norm(p.text));
+    const day: DayPlan = { day: 0, weekday: fmtDate(p.date) || (p.status === "scheduled" ? "Scheduled" : "Published"), cta: w?.cta || "", theme: w?.theme || "", isEventDay: false, slots: [] };
+    onPick(postSlot(p, w?.reaction || ""), day);
   };
 
-  const counts = plan
-    ? plan.days.flatMap((d) => d.slots).reduce((a, s) => ((a[s.platform] = (a[s.platform] || 0) + 1), a), {} as Record<string, number>)
-    : {};
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const Section = ({ title, items, hint }: { title: string; items: RealPost[]; hint: string }) =>
+    items.length === 0 ? null : (
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+          <h2 className="serif" style={{ fontSize: 20, color: "var(--ink)", margin: 0 }}>{title}</h2>
+          <span style={{ fontSize: 12, color: "var(--faint)" }}>{items.length} · {hint}</span>
+        </div>
+        <div style={{ maxWidth: 720 }}>{items.map((p) => <RealRow key={p.id} post={p} why={why.get(norm(p.text))} onPick={() => pick(p)} />)}</div>
+      </div>
+    );
+
+  return (
+    <div style={{ marginTop: 24 }}>
+      <Section title="Upcoming" items={scheduled} hint="scheduled to go out" />
+      <Section title="Posted" items={published} hint="already published" />
+    </div>
+  );
+}
+
+export default function CalendarPage() {
+  const [plan, setPlan] = useState<WeekPlan | null>(null);
+  const [lens, setLens] = useState<"all" | Platform>("all");
+  const [picked, setPicked] = useState<{ slot: ContentSlot; day: DayPlan; hideStats?: boolean } | null>(null);
+  const [real, setReal] = useState<RealPost[] | null>(null); // null = loading
+
+  useEffect(() => {
+    setPlan(loadPlanLocal());
+    let alive = true;
+    fetch("/api/posts?all=1")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d: any) => alive && setReal(Array.isArray(d.posts) ? d.posts : []))
+      .catch(() => alive && setReal([]));
+    return () => { alive = false; };
+  }, []);
+
+  const usingReal = !!real && real.length > 0;
+  const realCounts = (real || []).reduce(
+    (a, p) => { a.total++; if (p.status === "scheduled") a.scheduled++; else a.published++; (a.byPlat[p.platform] = (a.byPlat[p.platform] || 0) + 1); return a; },
+    { total: 0, scheduled: 0, published: 0, byPlat: {} as Record<string, number> }
+  );
+  const planCounts = plan ? plan.days.flatMap((d) => d.slots).reduce((a, s) => ((a[s.platform] = (a[s.platform] || 0) + 1), a), {} as Record<string, number>) : {};
+  const counts: Record<string, number> = usingReal ? realCounts.byPlat : planCounts;
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 28px 64px" }}>
@@ -294,38 +386,27 @@ export default function CalendarPage() {
         <div>
           <div className="eyebrow" style={{ color: "var(--clay-deep)" }}>Content calendar</div>
           <h1 className="serif" style={{ fontSize: 34, color: "var(--ink)", margin: "4px 0 0", lineHeight: 1.1 }}>
-            {plan ? plan.brand?.name || "Your week" : "Your week, scheduled"}
+            {usingReal ? "What you've posted" : plan ? plan.brand?.name || "Your week" : "Your week, scheduled"}
           </h1>
-          {plan && (
+          {usingReal ? (
             <p style={{ color: "var(--muted)", fontSize: 13.5, margin: "6px 0 0" }}>
-              {total} posts across {Object.keys(counts).length} platforms · {plan.days.length} days
-              {isDemo && <span style={{ color: "var(--hold)", fontWeight: 600 }}> · demo week</span>}
+              {realCounts.published} published · {realCounts.scheduled} scheduled, across {Object.keys(realCounts.byPlat).length} channels
             </p>
-          )}
+          ) : plan ? (
+            <p style={{ color: "var(--muted)", fontSize: 13.5, margin: "6px 0 0" }}>
+              Planned week · not published yet. Connect a channel and publish to see it here live.
+            </p>
+          ) : null}
         </div>
 
-        {plan && (
+        {(usingReal || plan) && (
           <div style={{ display: "flex", gap: 6, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 999, padding: 4 }}>
             {LENS.map((l) => {
               const active = lens === l.key;
               return (
-                <button
-                  key={l.key}
-                  type="button"
-                  onClick={() => setLens(l.key)}
-                  style={{
-                    border: "none",
-                    background: active ? "var(--clay)" : "transparent",
-                    color: active ? "#fff" : "var(--text)",
-                    fontWeight: 600,
-                    fontSize: 12.5,
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    cursor: "pointer",
-                  }}
-                >
-                  {l.label}
-                  {l.key !== "all" && counts[l.key] ? ` (${counts[l.key]})` : ""}
+                <button key={l.key} type="button" onClick={() => setLens(l.key)}
+                  style={{ border: "none", background: active ? "var(--clay)" : "transparent", color: active ? "#fff" : "var(--text)", fontWeight: 600, fontSize: 12.5, padding: "6px 12px", borderRadius: 999, cursor: "pointer" }}>
+                  {l.label}{l.key !== "all" && counts[l.key] ? ` (${counts[l.key]})` : ""}
                 </button>
               );
             })}
@@ -333,45 +414,39 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* empty state */}
-      {!plan && (
-        <div
-          style={{
-            marginTop: 40,
-            border: "1px dashed var(--border-strong)",
-            borderRadius: 16,
-            background: "var(--card)",
-            padding: "48px 32px",
-            textAlign: "center",
-            maxWidth: 560,
-            marginInline: "auto",
-          }}
-        >
-          <h2 className="serif" style={{ fontSize: 22, color: "var(--ink)", margin: 0 }}>No week generated yet</h2>
-          <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.55, margin: "10px auto 22px", maxWidth: 380 }}>
-            Generate a week on the home page and it will lay out here across its scheduled days. Want to see how it looks first?
+      {/* loading */}
+      {real === null && <div style={{ marginTop: 40, color: "var(--muted)", fontSize: 14 }}>Loading your posts…</div>}
+
+      {/* real published + scheduled */}
+      {usingReal && <RealTimeline posts={real!} lens={lens} plan={plan} onPick={(slot, day) => setPicked({ slot, day, hideStats: true })} />}
+
+      {/* planned week (the strategy / why) when nothing is published yet */}
+      {real !== null && !usingReal && plan && (
+        <>
+          <div style={{ marginTop: 18, fontSize: 12.5, color: "var(--muted)" }}>Here is the plan and the reasoning behind each post. It moves to the timeline above once published.</div>
+          <div style={{ marginTop: 16, display: "flex", gap: 14, overflowX: "auto", paddingBottom: 12 }}>
+            {plan.days.map((day) => (
+              <DayColumn key={day.day} day={day} lens={lens} onPick={(slot, d) => setPicked({ slot, day: d, hideStats: false })} />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* nothing at all */}
+      {real !== null && !usingReal && !plan && (
+        <div style={{ marginTop: 40, border: "1px dashed var(--border-strong)", borderRadius: 16, background: "var(--card)", padding: "48px 32px", textAlign: "center", maxWidth: 560, marginInline: "auto" }}>
+          <h2 className="serif" style={{ fontSize: 22, color: "var(--ink)", margin: 0 }}>Nothing scheduled yet</h2>
+          <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.55, margin: "10px auto 22px", maxWidth: 400 }}>
+            Generate a week on the Console and publish it. Your published and scheduled posts show up here, on the days they go out.
           </p>
-          <button
-            type="button"
-            onClick={showDemo}
-            style={{ background: "var(--clay)", color: "#fff", border: "none", fontWeight: 600, fontSize: 14, padding: "11px 22px", borderRadius: 10, cursor: "pointer" }}
-          >
-            Load a demo week
-          </button>
+          <Link href="/" style={{ display: "inline-block", background: "var(--clay)", color: "#fff", fontWeight: 600, fontSize: 14, padding: "11px 22px", borderRadius: 10, textDecoration: "none" }}>
+            New launch
+          </Link>
         </div>
       )}
 
-      {/* week grid */}
-      {plan && (
-        <div style={{ marginTop: 22, display: "flex", gap: 14, overflowX: "auto", paddingBottom: 12 }}>
-          {plan.days.map((day) => (
-            <DayColumn key={day.day} day={day} lens={lens} onPick={(slot, d) => setPicked({ slot, day: d })} />
-          ))}
-        </div>
-      )}
-
-      {picked && plan && (
-        <PreviewModal slot={picked.slot} day={picked.day} brand={plan.brand} onClose={() => setPicked(null)} />
+      {picked && (
+        <PreviewModal slot={picked.slot} day={picked.day} brand={plan?.brand || ({ name: "", mission: "", voice: "", summary: "", colors: [] } as WeekPlan["brand"])} onClose={() => setPicked(null)} hideStats={picked.hideStats} />
       )}
     </div>
   );
