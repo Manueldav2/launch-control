@@ -13,7 +13,7 @@ import type { ContentSlot, DayPlan, WeekPlan, Platform } from "@/lib/types";
 import { PlatformPreview } from "../previews/PlatformPreview";
 import { loadPlanLocal } from "./plan-store";
 
-const PLATFORM_META: Record<Platform, { label: string; color: string; glyph: React.ReactNode }> = {
+const PLATFORM_META: Record<string, { label: string; color: string; glyph: React.ReactNode }> = {
   x: {
     label: "X",
     color: "#0f0f0f",
@@ -28,6 +28,11 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; glyph: Rea
     label: "Instagram",
     color: "#e1306c",
     glyph: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg>,
+  },
+  tiktok: {
+    label: "TikTok",
+    color: "#010101",
+    glyph: <svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M16.5 2c.3 2.3 1.6 3.9 3.9 4.1v2.7c-1.4.1-2.7-.3-3.9-1v6.6c0 3.6-2.6 5.9-5.7 5.6-3-.3-4.9-2.9-4.4-5.9.4-2.4 2.4-4 4.8-3.9.3 0 .6.1.9.1v2.8c-.3-.1-.6-.2-1-.2-1.2 0-2.1 1-2 2.2.1 1.1 1 1.9 2.1 1.8 1.2-.1 1.9-1 1.9-2.2V2h3.4z"/></svg>,
   },
 };
 
@@ -293,64 +298,99 @@ function buildWhy(plan: WeekPlan | null): Map<string, { reaction: string; theme:
   return m;
 }
 
-function RealRow({ post, why, onPick }: { post: RealPost; why?: { reaction: string; theme: string; cta: string }; onPick: () => void }) {
-  const meta = PLATFORM_META[post.platform as Platform];
+function fmtTime(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+function dayKey(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "" : `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+function dayHeader(iso?: string | null): { weekday: string; md: string } {
+  const d = new Date(iso || "");
+  if (isNaN(d.getTime())) return { weekday: "", md: "" };
+  return { weekday: d.toLocaleDateString(undefined, { weekday: "short" }), md: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) };
+}
+
+// One post placed inside a day column (shows its time + platform icon).
+function RealDayPost({ post, onPick }: { post: RealPost; onPick: () => void }) {
   const scheduled = post.status === "scheduled";
   return (
     <button
       type="button"
       onClick={onPick}
-      style={{ display: "flex", gap: 12, width: "100%", textAlign: "left", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 14, cursor: "pointer", marginBottom: 10 }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--clay)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+      style={{ display: "block", width: "100%", textAlign: "left", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 10, cursor: "pointer", marginBottom: 8 }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--clay)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.boxShadow = "none"; }}
     >
-      <PlatformDot platform={post.platform as Platform} size={28} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>{meta?.label || post.platform}</span>
-          <span style={{ fontSize: 11, color: "var(--faint)" }}>{fmtDate(post.date)}</span>
-          <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: scheduled ? "var(--clay-bg)" : "var(--go-bg)", color: scheduled ? "var(--clay-deep)" : "var(--go)" }}>
-            {scheduled ? "Scheduled" : "Published"}
-          </span>
-        </div>
-        <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.text}</div>
-        {why?.reaction && (
-          <div style={{ fontSize: 11.5, color: "var(--clay-deep)", fontStyle: "italic", marginTop: 5 }}>
-            Why: {why.reaction}
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+        <PlatformDot platform={post.platform} size={20} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ink)" }}>{fmtTime(post.date)}</span>
+        <span title={scheduled ? "Scheduled" : "Published"} style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: scheduled ? "var(--clay)" : "var(--go)" }} />
       </div>
+      <div style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{post.text}</div>
     </button>
   );
 }
 
-function RealTimeline({ posts, lens, plan, onPick }: { posts: RealPost[]; lens: "all" | Platform; plan: WeekPlan | null; onPick: (slot: ContentSlot, day: DayPlan) => void }) {
+// Real calendar — posts laid out in day columns on the day (and time) they
+// went out or are scheduled for. Newest/upcoming on the right.
+function RealCalendar({ posts, lens, plan, profiles, onPick }: { posts: RealPost[]; lens: "all" | Platform; plan: WeekPlan | null; profiles: Record<string, any>; onPick: (slot: ContentSlot, day: DayPlan, brand: WeekPlan["brand"]) => void }) {
   const why = buildWhy(plan);
   const shown = posts.filter((p) => lens === "all" || p.platform === lens);
-  const scheduled = shown.filter((p) => p.status === "scheduled").sort((a, b) => +new Date(a.date || 0) - +new Date(b.date || 0));
-  const published = shown.filter((p) => p.status !== "scheduled").sort((a, b) => +new Date(b.date || 0) - +new Date(a.date || 0));
+
+  const groups: { key: string; ts: number; iso: string; posts: RealPost[] }[] = [];
+  const idx = new Map<string, number>();
+  for (const p of shown) {
+    const k = dayKey(p.date);
+    if (!k) continue;
+    if (!idx.has(k)) { idx.set(k, groups.length); groups.push({ key: k, ts: new Date(p.date!).setHours(0, 0, 0, 0), iso: p.date!, posts: [] }); }
+    groups[idx.get(k)!].posts.push(p);
+  }
+  groups.sort((a, b) => a.ts - b.ts);
+  groups.forEach((g) => g.posts.sort((a, b) => +new Date(a.date || 0) - +new Date(b.date || 0)));
+  const todayTs = new Date().setHours(0, 0, 0, 0);
 
   const pick = (p: RealPost) => {
     const w = why.get(norm(p.text));
+    const prof = profiles[p.platform] || {};
+    const brand: WeekPlan["brand"] = {
+      name: prof.displayName || prof.username || PLATFORM_META[p.platform]?.label || p.platform,
+      mission: "", voice: "", summary: prof.bio || "",
+      colors: [PLATFORM_META[p.platform]?.color || "#555"],
+      logo: prof.avatarUrl || undefined,
+    };
     const day: DayPlan = { day: 0, weekday: fmtDate(p.date) || (p.status === "scheduled" ? "Scheduled" : "Published"), cta: w?.cta || "", theme: w?.theme || "", isEventDay: false, slots: [] };
-    onPick(postSlot(p, w?.reaction || ""), day);
+    onPick(postSlot(p, w?.reaction || ""), day, brand);
   };
 
-  const Section = ({ title, items, hint }: { title: string; items: RealPost[]; hint: string }) =>
-    items.length === 0 ? null : (
-      <div style={{ marginBottom: 28 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
-          <h2 className="serif" style={{ fontSize: 20, color: "var(--ink)", margin: 0 }}>{title}</h2>
-          <span style={{ fontSize: 12, color: "var(--faint)" }}>{items.length} · {hint}</span>
-        </div>
-        <div style={{ maxWidth: 720 }}>{items.map((p) => <RealRow key={p.id} post={p} why={why.get(norm(p.text))} onPick={() => pick(p)} />)}</div>
-      </div>
-    );
+  if (groups.length === 0) return <div style={{ marginTop: 32, color: "var(--muted)", fontSize: 14 }}>No posts on {LENS.find((l) => l.key === lens)?.label} yet.</div>;
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <Section title="Upcoming" items={scheduled} hint="scheduled to go out" />
-      <Section title="Posted" items={published} hint="already published" />
+    <div style={{ marginTop: 22, display: "flex", gap: 12, overflowX: "auto", paddingBottom: 14, alignItems: "flex-start" }}>
+      {groups.map((g) => {
+        const h = dayHeader(g.iso);
+        const isToday = g.ts === todayTs;
+        const isFuture = g.ts > todayTs;
+        return (
+          <div key={g.key} style={{ flex: "0 0 218px", width: 218, background: isFuture ? "var(--clay-bg)" : "var(--bg-2)", border: `1px solid ${isToday || isFuture ? "var(--clay)" : "var(--border)"}`, borderRadius: 14, padding: 12 }}>
+            <div style={{ marginBottom: 10, display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4 }}>{h.weekday}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--ink)" }}>{h.md}</div>
+              </div>
+              {(isToday || isFuture) && (
+                <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "var(--clay-deep)", background: "#fff", padding: "2px 6px", borderRadius: 999, border: "1px solid var(--clay)" }}>
+                  {isToday ? "Today" : "Scheduled"}
+                </span>
+              )}
+            </div>
+            {g.posts.map((p) => <RealDayPost key={p.id} post={p} onPick={() => pick(p)} />)}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -358,15 +398,16 @@ function RealTimeline({ posts, lens, plan, onPick }: { posts: RealPost[]; lens: 
 export default function CalendarPage() {
   const [plan, setPlan] = useState<WeekPlan | null>(null);
   const [lens, setLens] = useState<"all" | Platform>("all");
-  const [picked, setPicked] = useState<{ slot: ContentSlot; day: DayPlan; hideStats?: boolean } | null>(null);
+  const [picked, setPicked] = useState<{ slot: ContentSlot; day: DayPlan; hideStats?: boolean; brand?: WeekPlan["brand"] } | null>(null);
   const [real, setReal] = useState<RealPost[] | null>(null); // null = loading
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
 
   useEffect(() => {
     setPlan(loadPlanLocal());
     let alive = true;
     fetch("/api/posts?all=1")
       .then((r) => (r.ok ? r.json() : {}))
-      .then((d: any) => alive && setReal(Array.isArray(d.posts) ? d.posts : []))
+      .then((d: any) => { if (!alive) return; setReal(Array.isArray(d.posts) ? d.posts : []); setProfiles(d.profiles || {}); })
       .catch(() => alive && setReal([]));
     return () => { alive = false; };
   }, []);
@@ -418,7 +459,7 @@ export default function CalendarPage() {
       {real === null && <div style={{ marginTop: 40, color: "var(--muted)", fontSize: 14 }}>Loading your posts…</div>}
 
       {/* real published + scheduled */}
-      {usingReal && <RealTimeline posts={real!} lens={lens} plan={plan} onPick={(slot, day) => setPicked({ slot, day, hideStats: true })} />}
+      {usingReal && <RealCalendar posts={real!} lens={lens} plan={plan} profiles={profiles} onPick={(slot, day, brand) => setPicked({ slot, day, hideStats: true, brand })} />}
 
       {/* planned week (the strategy / why) when nothing is published yet */}
       {real !== null && !usingReal && plan && (
@@ -446,7 +487,7 @@ export default function CalendarPage() {
       )}
 
       {picked && (
-        <PreviewModal slot={picked.slot} day={picked.day} brand={plan?.brand || ({ name: "", mission: "", voice: "", summary: "", colors: [] } as WeekPlan["brand"])} onClose={() => setPicked(null)} hideStats={picked.hideStats} />
+        <PreviewModal slot={picked.slot} day={picked.day} brand={picked.brand || plan?.brand || ({ name: "", mission: "", voice: "", summary: "", colors: [] } as WeekPlan["brand"])} onClose={() => setPicked(null)} hideStats={picked.hideStats} />
       )}
     </div>
   );

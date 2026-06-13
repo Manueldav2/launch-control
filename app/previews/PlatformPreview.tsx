@@ -87,6 +87,7 @@ function Avatar({
         alt=""
         width={size}
         height={size}
+        referrerPolicy="no-referrer"
         style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block", background: "#fff" }}
         draggable={false}
       />

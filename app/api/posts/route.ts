@@ -102,17 +102,19 @@ export async function GET(req: NextRequest) {
     if (sp.get("all") === "1") {
       const accounts = await listAccounts(profileId);
       const out: any[] = [];
+      const profiles: Record<string, any> = {}; // platform -> real account identity
       await Promise.all(
         accounts.map(async (a: any) => {
           const aid = a.accountId || a._id || a.id;
           if (!aid) return;
           const channel = FROM_ZERNIO[a.platform] || a.platform;
+          profiles[channel] = buildProfile(a);
           const [pub, sched] = await Promise.all([fetchPosts(profileId, aid), fetchScheduled(aid)]);
           for (const p of [...pub, ...sched]) out.push(normalize(p, channel, aid));
         })
       );
       const posts = out.filter((p) => p.id).sort((x, y) => (x.date && y.date ? +new Date(x.date) - +new Date(y.date) : 0));
-      return NextResponse.json({ posts, connected: accounts.length > 0 });
+      return NextResponse.json({ posts, profiles, connected: accounts.length > 0 });
     }
 
     let match: any = null;
