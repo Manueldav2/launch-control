@@ -72,7 +72,14 @@ export async function GET(req: NextRequest) {
               await replyComment(postId, a.accountId, reply, cid);
               item.posted = true; replied++;
               if (c) await c.from("handled_comments").insert({ comment_id: cid, post_id: postId, account_id: a.accountId, reply });
-            } catch { /* leave unhandled so the next run retries */ }
+            } catch (e: any) {
+              const msg = String(e?.message || e);
+              item.error = msg.slice(0, 200);
+              // Permanent platform rejection (e.g. X's "who can reply" rule) — record
+              // it so we don't redraft + retry forever. Transient errors retry next run.
+              const permanent = /not allowed|forbidden|403|invalid|cannot|not be replied|unsupported|deleted/i.test(msg);
+              if (permanent && c) await c.from("handled_comments").insert({ comment_id: cid, post_id: postId, account_id: a.accountId, reply: `[skipped: ${msg.slice(0, 120)}]` });
+            }
           }
           replies.push(item);
         }
