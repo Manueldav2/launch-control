@@ -1,9 +1,15 @@
-# Launch Rubric — what the critic grades every slot against
+# Launch Rubric — how "done" is graded without a human
 
-The critic (`gradeSlot` in `lib/critic.ts`) runs on every content slot. A
-slot must pass ALL checks or it gets regenerated. The week is "done" only when
-every slot passes. Each check is a hard binary so the model can grade it without
-a human.
+Two layers, both machine-checkable: the **per-slot copy rubric** the critic grades
+every post against, and the **project acceptance rubric** the harness
+(`scripts/verify.mjs`) grades the whole system against a live URL.
+
+## Per-slot copy rubric (the self-grading critic)
+
+`gradeSlot` + `gradeSlotLLM` (`lib/critic.ts`) run on every content slot. A slot
+must pass ALL checks or `fixSlotCopy` rewrites it; the loop retries up to 3x, so
+the week converges to all-green. The week is "done" only when every slot passes.
+Each check is a hard binary so the model can grade it without a human.
 
 | # | Check | Pass condition |
 |---|-------|----------------|
@@ -11,27 +17,44 @@ a human.
 | 2 | Channel length | X copy is <= 280 characters |
 | 3 | Not empty | Copy is >= 10 characters of real content |
 | 4 | Media has direction | image / ugc_video / motion_video slots carry a concrete `mediaPrompt` |
-| 5 | No fabrication | No invented statistic, client, quote, or claim not grounded in the site (LLM check, layered on) |
-| 6 | CTA present | The day's shared call-to-action is woven into the copy (LLM check, layered on) |
+| 5 | No fabrication | No invented statistic, count, dollar figure, quote, or claim not grounded in the site (Opus LLM check). The planner is also instructed never to invent specifics, so this rarely fires. |
+| 6 | CTA present | The day's shared call-to-action is woven into the copy (Opus LLM check) |
 
-## How "done" is verified without a human
-1. `POST /api/generate-week` returns `scorecard: { total, passing, fixed }`.
-2. The run is green when `passing === total`.
-3. The deployed app URL returns HTTP 200 and renders the 7 days.
+Checks 1-4 are deterministic; 5-6 are an Opus grading pass per slot. Every failing
+slot is rewritten and re-graded up to three times before the week is reported.
 
-Checks 1-4 are deterministic and ship today. Checks 5-6 are the LLM critic
-extension (same loop, an Opus grading pass per slot).
+## Project acceptance rubric (the whole system)
+
+`scripts/verify.mjs --live` (or `--url <base>`) hits a live deployment and grades
+these as hard binaries. Exit 0 only when every check passes. The live run defaults
+to a *fresh* problem (a Habitat home build in Atlanta) so a green run proves the
+engine generalizes. (Bare `node scripts/verify.mjs` runs only the offline gate-1
+rubric tests — that is the keyless check CI runs on every push.)
+
+| Area | Check |
+|------|-------|
+| Demo | `GET /` returns 200 |
+| Distribution | `/api/connect` offers X, LinkedIn, Instagram, TikTok; >= 1 account connected |
+| Opus + Impact | `/api/generate-week` returns a 7-day, >=12-slot plan; self-grade `passing === total` |
+| Grounding | Brand researched from the real site (name + colors); copy localized to the event city; zero AI-tells anywhere |
+| Event mode | A weather forecast + recommendation (reschedule\|rain_plan\|proceed) attached for the in-person event |
+| Media | `/api/generate-media` renders AND persists to Supabase Storage (permanent URL) |
+| Routing | A no-media UGC slot routes to Instagram + TikTok and is correctly skipped (0 posts) |
+
+## Reproduce / rerun on any problem tomorrow
 
 The deterministic half is provable with **no API key**: `npx tsx --test
 lib/critic.test.ts` runs one failing case per rubric item (1-4) plus the
 fabrication/CTA parse guard, and exits non-zero on any regression.
-
-## Reproduce
 ```
-POST /api/generate-week
-{ "goal": "...", "cta": "...", "website": "https://..." }
+node scripts/verify.mjs                                  # gate 1: rubric tests, offline, no key (CI)
+node scripts/verify.mjs --live                           # + full acceptance vs the deployed URL
+node scripts/verify.mjs --live --goal "..." --cta "..." --website "https://..." --location "Austin, TX"
+node scripts/verify.mjs --url http://localhost:3000      # + acceptance vs a local dev server
 ```
-A passing response is the acceptance test. Swap the inputs to grade any campaign.
+A green run (exit 0) is the acceptance test. Swap the inputs to grade any
+campaign. The media create→review→regenerate loop has its own end-to-end check:
+`node scripts/selftest-media-pipeline.mjs` (render → enqueue → claim → verdict → gallery).
 
 # Visual Rubric — what the visual critic grades every render against
 

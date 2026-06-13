@@ -29,25 +29,33 @@ export type AssetRecord = {
   caption?: string;
 };
 
-// Save one generated asset. No-op (returns false) if no DB configured.
+// Save one generated asset directly (the client gallery save). This is a direct,
+// already-accepted save — not a review-queue entry — so it lands as 'approved'
+// and shows in the gallery. The review lifecycle (pending_review → approved) runs
+// through lib/media-pipeline's enqueueAsset instead. No-op (false) if no DB.
 export async function saveAsset(a: AssetRecord): Promise<boolean> {
   const c = db();
   if (!c) return false;
   try {
     await c.from("assets").upsert(
       { org: a.org || "demo", url: a.url.split("?")[0], content_type: a.content_type,
-        platform: a.platform, day: a.day || null, brand: a.brand || null, caption: a.caption || null },
+        platform: a.platform, day: a.day || null, brand: a.brand || null, caption: a.caption || null,
+        status: "approved" },
       { onConflict: "org,url" });
     return true;
   } catch { return false; }
 }
 
-export async function listAssets(org = "demo", limit = 60): Promise<AssetRecord[]> {
+// List assets newest-first. Pass status (e.g. "approved") to show only that
+// stage of the review lifecycle; omit it for everything. The Asset Bay reads
+// status="approved" so pending/rejected renders never show in the gallery.
+export async function listAssets(org = "demo", limit = 60, status?: string): Promise<AssetRecord[]> {
   const c = db();
   if (!c) return [];
   try {
-    const { data } = await c.from("assets").select("*")
-      .eq("org", org).order("created_at", { ascending: false }).limit(limit);
+    let q = c.from("assets").select("*").eq("org", org);
+    if (status) q = q.eq("status", status);
+    const { data } = await q.order("created_at", { ascending: false }).limit(limit);
     return (data as AssetRecord[]) || [];
   } catch { return []; }
 }

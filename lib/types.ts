@@ -38,6 +38,8 @@ export interface DayPlan {
   theme: string;
   // True for the event day (e.g. the Saturday beach cleanup) the week builds toward.
   isEventDay: boolean;
+  // Set by the weather decision (a rain-or-shine / backup line shown as a ribbon).
+  weatherNote?: string;
   slots: ContentSlot[];
 }
 
@@ -50,6 +52,43 @@ export interface WeekInputs {
   // the CTA + hook patterns that actually win. Requires BRIGHT_DATA_API_KEY;
   // ignored (and the engine behaves exactly as before) when unset.
   competitors?: string[];
+  // The in-person event location ("Ocean Beach, San Francisco"). Empty or "NA"
+  // means there is no physical place — the CTA points to the website instead.
+  location?: string;
+}
+
+// True when this launch is a real "go somewhere" event (location is set and not NA).
+export function isEventMode(inputs: { location?: string }): boolean {
+  const l = (inputs.location || "").trim().toLowerCase();
+  return !!l && l !== "na" && l !== "n/a" && l !== "none" && l !== "online";
+}
+
+// Open-Meteo forecast for the event day + the engine's recommendation. Drives the
+// weather decision Gen UI for go-to-place events.
+export interface WeatherWatch {
+  location: string;     // the resolved place we forecasted for
+  eventDate: string;    // ISO date (YYYY-MM-DD) of the event
+  weekday: string;      // "Saturday"
+  condition: string;    // human label: "Heavy rain", "Clear", ...
+  precipProb: number;   // 0-100 chance of precipitation
+  tempMaxC: number;
+  windMaxKmh: number;
+  isBad: boolean;       // outdoor-event-unfriendly forecast
+  severe: boolean;      // thunderstorm/snow/extreme — gathering is risky
+  summary: string;      // one-line human read of the day
+  recommendation: "reschedule" | "rain_plan" | "proceed";
+  rainPlanNote?: string;        // the rain-or-shine line to add if they keep the day
+  altDay?: { weekday: string; date: string; condition: string; precipProb: number };
+}
+
+// A created Luma event for an event-mode launch.
+export interface LumaEvent {
+  id: string;
+  url: string;
+  name: string;
+  startAt: string;     // ISO
+  timezone: string;
+  description: string; // markdown description the engine wrote
 }
 
 export interface BrandContext {
@@ -67,5 +106,7 @@ export interface WeekPlan {
   playbook?: string; // the researched "what wins" intel that shaped the plan
   competitorIntel?: string; // real peer CTA/hook patterns mined via Bright Data (optional)
   days: DayPlan[];
+  weather?: WeatherWatch | null; // set for go-to-place events
+  luma?: LumaEvent | null;       // set once a Luma event is created
   createdAt: string;
 }

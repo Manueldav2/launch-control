@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Newsreader, Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
-import Sidebar from "./Sidebar";
+import AppFrame from "./AppFrame";
 
 const serif = Newsreader({
   subsets: ["latin"],
@@ -35,8 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <feDisplacementMap in="SourceGraphic" in2="blur" scale="22" xChannelSelector="R" yChannelSelector="G" />
           </filter>
         </svg>
-        <Sidebar />
-        <div className="app-shell">{children}</div>
+        <AppFrame>{children}</AppFrame>
       </body>
     </html>
   );

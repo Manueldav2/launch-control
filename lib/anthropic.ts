@@ -2,25 +2,51 @@
 // Research the brand + what wins, THEN write the 7-day plan. This is the "what
 // do we post" brain. Grading/rewriting lives in critic.ts (owned by review).
 import type { WeekInputs, WeekPlan, DayPlan, ContentSlot, BrandContext } from "./types";
-import { PLATFORMS } from "./types";
+import { PLATFORMS, isEventMode } from "./types";
 import { claude, MODEL, extractJson } from "./llm";
 import { researchBrand, winningPatterns, competitorIntel } from "./research";
+import { assessEventWeather } from "./weather";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 
 const SYSTEM = `You are the strategist for a small nonprofit's social launch.
 You plan a 7-day content calendar that builds to a headline event (e.g. a
-Saturday beach cleanup). You write copy a real person would post: specific,
-warm, human. You NEVER use em-dashes, hype words (delve, game-changer, unlock,
-seamless, leverage), fake statistics, or invented quotes. Every day shares ONE
-call to action across all platforms. Each platform aims at a distinct reaction.
-You design to what WINS — the playbook below is real performance intel; follow it.`;
+Saturday beach cleanup). You write copy a real person would post: concrete,
+warm, human. Be specific about FEELINGS, SCENES, and the ASK, never about made-up
+facts. You NEVER use em-dashes or hype words (delve, game-changer, unlock,
+seamless, leverage). CRITICAL grounding rule: NEVER invent a specific number,
+count, statistic, dollar figure, percentage, date, or quotation that you were not
+given. If you don't have a real figure, write without one ("we still need more
+volunteers", not "we need eleven more"; "a lot of trash", not "1,900 pounds").
+Every day shares ONE call to action across all platforms. Each platform aims at a
+distinct reaction. You design to what WINS — the playbook below is real
+performance intel; follow it.`;
 
 function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string, competitorIntel: string): string {
   const eventDay = inputs.eventWeekday || "Saturday";
+  const event = isEventMode(inputs);
+  const place = (inputs.location || "").trim();
+  const localBlock = event
+    ? `
+THIS IS AN IN-PERSON EVENT in ${place}. The whole week's job is to get the LOCAL
+audience to physically show up. So:
+- Write to people who live near ${place}. Name the place naturally (the neighborhood,
+  the landmark, the meeting spot) so it feels local, not generic.
+- Give concrete reasons to come in person: who they will meet, what they will see and
+  feel being there, how easy it is to get to, what to bring. Make missing it feel like
+  missing something real happening in their town.
+- The ${eventDay} CTA is to SHOW UP at ${place} (the website link is for details/RSVP).
+- In every mediaPrompt, set the scene in a recognizable ${place} setting with real
+  locals — the actual kind of place this happens (the beach, the park, the venue),
+  not a generic stock backdrop. Weave the brand colors in via what people wear / signage.`
+    : `
+THIS CTA POINTS TO THE WEBSITE (no physical location). Keep the ask online: click,
+sign up, donate, share. Do NOT invent a venue, address, or "come to" language.`;
   return `GOAL: ${inputs.goal}
 OVERALL CTA: ${inputs.cta}
 WEBSITE: ${inputs.website}
 HEADLINE EVENT DAY: ${eventDay}
+LOCATION: ${event ? place : "online / website (no physical location)"}
+${localBlock}
 
 THE BRAND (researched from their real site — stay true to it, never invent facts):
 - Name: ${brand.name}
@@ -59,18 +85,23 @@ Return ONLY JSON, no prose:
 }
 
 export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
-  const key = cacheKey(["week", inputs, MODEL, "v3-competitors"]);
+  // v5 = competitor intel (HEAD) + weather grounding (main) both in the plan, so
+  // the key is bumped to invalidate any cache entry that predates either field.
+  const key = cacheKey(["week", inputs, MODEL, "v5-competitors-grounded"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
-  // Research the brand, the general playbook, and (optionally) real competitor
-  // intel — all concurrently, since each feeds the plan independently. The
-  // competitor pass is a no-op returning "" unless Bright Data is configured AND
-  // inputs.competitors were supplied, so cost/latency stay opt-in.
-  const [brand, playbook, competitors] = await Promise.all([
+  const event = isEventMode(inputs);
+  // Research the brand, the general playbook, (optionally) real competitor intel,
+  // and (for in-person events) the forecast for the event day — all concurrently,
+  // since each feeds the plan independently. The competitor pass is a no-op
+  // returning "" unless Bright Data is configured AND inputs.competitors were
+  // supplied, so cost/latency stay opt-in.
+  const [brand, playbook, competitors, weather] = await Promise.all([
     researchBrand(inputs.website, apiKey),
     winningPatterns(inputs.goal, inputs.cta, apiKey),
     competitorIntel(inputs.goal, inputs.competitors || [], apiKey),
+    event ? assessEventWeather(inputs.location!, inputs.eventWeekday || "Saturday") : Promise.resolve(null),
   ]);
 
   const msg = await claude(apiKey).messages.create({
@@ -87,6 +118,7 @@ export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Pro
     brand,                       // the REAL researched brand (colors + logo + voice)
     playbook,
     competitorIntel: competitors, // real peer CTA intel (empty unless Bright Data + competitors set)
+    weather,                     // forecast + recommendation for go-to-place events
     days: (data.days || []).map((d: DayPlan) => ({
       ...d,
       slots: (d.slots || []).filter((s: ContentSlot) => PLATFORMS.includes(s.platform)),

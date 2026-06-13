@@ -15,7 +15,9 @@ import type { WeekPlan } from "@/lib/types";
 
 export const LC_PLAN_KEY = "lc_week_plan";
 
-export function savePlanLocal(plan: WeekPlan): void {
+// Accepts the plan as the home page holds it (a structural subset of WeekPlan);
+// this is a localStorage serializer, so it stays tolerant of the exact shape.
+export function savePlanLocal(plan: WeekPlan | unknown): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(LC_PLAN_KEY, JSON.stringify(plan));

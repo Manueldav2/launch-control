@@ -6,6 +6,7 @@ import { generateWeekPlan } from "@/lib/anthropic";
 import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
 import { fixRender } from "@/lib/visual-critic";
 import { generateImage } from "@/lib/fal";
+import { userIdFromRequest } from "@/lib/auth-server";
 import type { WeekInputs, ContentType } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -25,6 +26,11 @@ function brandedPrompt(prompt: string, colors: string[], contentType: ContentTyp
 
 export async function POST(req: NextRequest) {
   try {
+    // Generation is gated on sign-in. Text (the week's copy) is unlimited for a
+    // signed-in account; media has a free quota (see /api/generate-media).
+    const userId = await userIdFromRequest(req);
+    if (!userId) return NextResponse.json({ error: "Create a free account to generate your launch week." }, { status: 401 });
+
     const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean; renderMedia?: boolean; apiKey?: string };
     if (!body.goal || !body.cta || !body.website)
       return NextResponse.json({ error: "goal, cta, and website are required" }, { status: 400 });
@@ -36,6 +42,7 @@ export async function POST(req: NextRequest) {
       goal: body.goal, cta: body.cta, website: body.website,
       eventWeekday: body.eventWeekday || "Saturday",
       competitors: body.competitors, // optional peer URLs to mine (no-op without Bright Data)
+      location: body.location,
     };
 
     const plan = await generateWeekPlan(inputs, apiKey);
@@ -62,15 +69,20 @@ export async function POST(req: NextRequest) {
           const det = gradeSlot(slot);
           const llm = deep ? await gradeSlotLLM(slot, day.cta, apiKey, grounding) : [];
           let failures = [...det.failures, ...llm];
-          if (failures.length) {
+          // Rewrite-and-regrade until the slot passes or we exhaust 3 attempts,
+          // so the week reliably converges to all-green instead of leaving a
+          // stubborn slot failing after a single try.
+          let attempt = 0;
+          while (failures.length && attempt < 3) {
             try {
               slot.copy = await fixSlotCopy(slot, failures, apiKey);
               const det2 = gradeSlot(slot);
               const llm2 = deep ? await gradeSlotLLM(slot, day.cta, apiKey, grounding) : [];
               failures = [...det2.failures, ...llm2];
-              fixed++;
+              if (attempt === 0) fixed++;
+              attempt++;
             } catch {
-              /* keep original + its failing grade */
+              break; // keep the last copy + its failing grade
             }
           }
           slot.grade = { pass: failures.length === 0, failures };

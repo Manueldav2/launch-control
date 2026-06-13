@@ -19,10 +19,15 @@ import type { ContentSlot, BrandContext, Platform } from "@/lib/types";
 export type PreviewProps = {
   slot: ContentSlot;
   brand?: Partial<BrandContext>;
-  /** "feed" = timeline density (default). "card" = slightly tighter for grids. */
-  size?: "feed" | "card";
+  /** "card" = standalone, bordered + rounded (default). "feed" = edge-to-edge
+   *  timeline row (no outer border/radius, bottom divider) for channel feeds. */
+  variant?: "card" | "feed";
   /** Relative timestamp shown in the header. Default "2h". */
   timeLabel?: string;
+  /** Real published posts have no reliable engagement numbers from the API, so
+   *  channels pass hideStats to render the action chrome WITHOUT fabricated
+   *  counts. The planned-week preview (calendar) leaves it off for illustration. */
+  hideStats?: boolean;
 };
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -82,6 +87,7 @@ function Avatar({
         alt=""
         width={size}
         height={size}
+        referrerPolicy="no-referrer"
         style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", display: "block", background: "#fff" }}
         draggable={false}
       />
@@ -244,25 +250,28 @@ function XAction({ icon, label, color }: { icon: React.ReactNode; label?: string
   );
 }
 
-function XPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function XPreview({ slot, brand, timeLabel = "2h", variant = "card", hideStats }: PreviewProps) {
   const name = brand?.name || "Your Brand";
   const handle = handleFromName(name);
+  const stat = (n: number) => (hideStats ? undefined : compact(n));
   const likes = seedNum(slot.copy, 80, 4200);
   const reposts = Math.floor(likes / 4.5);
   const replies = Math.floor(likes / 11);
   const views = likes * seedNum(slot.copy + "v", 12, 30);
   const hasMedia = slot.contentType !== "text";
+  const feed = variant === "feed";
 
   return (
     <article
       style={{
         background: XC.bg,
         color: XC.text,
-        border: `1px solid ${XC.divider}`,
-        borderRadius: 16,
+        border: feed ? "none" : `1px solid ${XC.divider}`,
+        borderBottom: `1px solid ${XC.divider}`,
+        borderRadius: feed ? 0 : 16,
         padding: "14px 16px",
         fontFamily: XC.font,
-        maxWidth: 540,
+        maxWidth: feed ? "none" : 540,
         width: "100%",
       }}
     >
@@ -293,22 +302,22 @@ function XPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12, maxWidth: 425 }}>
             <XAction
               color={XC.muted}
-              label={compact(replies)}
+              label={stat(replies)}
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 01-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1.1-4.4A8.4 8.4 0 1121 11.5z"/></svg>}
             />
             <XAction
               color={XC.green}
-              label={compact(reposts)}
+              label={stat(reposts)}
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 1l4 4-4 4-1.4-1.4L17.2 6H7v3H5V4h12.2l-1.6-1.6L17 1zM7 23l-4-4 4-4 1.4 1.4L6.8 18H17v-3h2v5H6.8l1.6 1.6L7 23z"/></svg>}
             />
             <XAction
               color={XC.like}
-              label={compact(likes)}
+              label={stat(likes)}
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.3-8.3C1 9.9 2 6.5 5.2 6c1.9-.3 3.5.8 4.3 2.1l.5.8.5-.8C11.3 6.8 12.9 5.7 14.8 6 18 6.5 19 9.9 17.3 12.7 15 16.5 12 21 12 21z"/></svg>}
             />
             <XAction
               color={XC.muted}
-              label={compact(views)}
+              label={stat(views)}
               icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 20V10H7V20H4zM10.5 20V4h3v16h-3zM17 20v-7h3v7h-3z"/></svg>}
             />
             <XAction
@@ -361,13 +370,15 @@ function LIButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function LinkedInPreview({ slot, brand, timeLabel = "2h", variant = "card", hideStats }: PreviewProps) {
+  const feed = variant === "feed";
   const name = brand?.name || "Your Brand";
   const subtitle =
     (brand?.summary && brand.summary.split(/[.\n]/)[0].trim().slice(0, 64)) ||
-    brand?.voice ||
-    "Nonprofit organization";
-  const followers = compact(seedNum(name, 1200, 48000));
+    (hideStats ? "" : brand?.voice || "Nonprofit organization");
+  // Real posts (hideStats) have no reliable follower count from the API, so we
+  // don't fabricate one.
+  const followers = hideStats ? null : compact(seedNum(name, 1200, 48000));
   const [open, setOpen] = useState(false);
   const long = slot.copy.length > 180;
   const body = long && !open ? slot.copy.slice(0, 180).trimEnd() : slot.copy;
@@ -380,13 +391,13 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
       style={{
         background: LI.bg,
         color: LI.text,
-        border: `1px solid ${LI.divider}`,
-        borderRadius: 10,
+        border: feed ? "none" : `1px solid ${LI.divider}`,
+        borderRadius: feed ? 0 : 10,
         fontFamily: LI.font,
-        maxWidth: 540,
+        maxWidth: feed ? "none" : 540,
         width: "100%",
         overflow: "hidden",
-        boxShadow: "0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04)",
+        boxShadow: feed ? "none" : "0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04)",
       }}
     >
       {/* header */}
@@ -394,11 +405,13 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
         <Avatar brand={brand} size={48} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>{name}</div>
-          <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {followers} followers
-          </div>
+          {followers && (
+            <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {followers} followers
+            </div>
+          )}
           <div style={{ color: LI.muted, fontSize: 12, lineHeight: 1.3, display: "flex", alignItems: "center", gap: 4 }}>
-            {subtitle} · {timeLabel} ·
+            {subtitle ? `${subtitle} · ` : ""}{timeLabel} ·
             <svg width="13" height="13" viewBox="0 0 24 24" fill={LI.muted} aria-hidden><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm6.9 9h-3a15 15 0 00-.9-4.3A8 8 0 0118.9 11zM12 4c.8 1 1.6 2.7 1.9 5h-3.8C10.4 6.7 11.2 5 12 4zM4.3 13h3a15 15 0 00.9 4.3A8 8 0 014.3 13zm3-2h-3a8 8 0 013.9-2.3 15 15 0 00-.9 2.3zm2.8 6h3.8c-.3 2.3-1.1 4-1.9 5-.8-1-1.6-2.7-1.9-5zm5.6 0h3a8 8 0 01-3.9 2.3 15 15 0 00.9-2.3z"/></svg>
           </div>
         </div>
@@ -424,6 +437,7 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
       {hasMedia && <Media slot={slot} brand={brand} radius={0} ratio="1.91 / 1" />}
 
       {/* social proof */}
+      {!hideStats && (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 4px", fontSize: 12, color: LI.muted }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ display: "inline-flex" }}>
@@ -435,6 +449,7 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
         </span>
         <span>{compact(comments)} comments</span>
       </div>
+      )}
 
       <div style={{ height: 1, background: LI.divider, margin: "0 16px" }} />
 
@@ -461,7 +476,8 @@ const IG = {
   font: '-apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
 };
 
-function InstagramPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function InstagramPreview({ slot, brand, timeLabel = "2h", variant = "card", hideStats }: PreviewProps) {
+  const feed = variant === "feed";
   const name = brand?.name || "Your Brand";
   const handle = handleFromName(name);
   const likes = seedNum(slot.copy, 120, 8400);
@@ -473,10 +489,11 @@ function InstagramPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
       style={{
         background: IG.bg,
         color: IG.text,
-        border: `1px solid ${IG.divider}`,
-        borderRadius: 8,
+        border: feed ? "none" : `1px solid ${IG.divider}`,
+        borderBottom: `1px solid ${IG.divider}`,
+        borderRadius: feed ? 0 : 8,
         fontFamily: IG.font,
-        maxWidth: 470,
+        maxWidth: feed ? "none" : 470,
         width: "100%",
         overflow: "hidden",
       }}
@@ -526,11 +543,11 @@ function InstagramPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
 
       {/* likes + caption */}
       <div style={{ padding: "0 12px 12px", fontSize: 13, lineHeight: 1.45 }}>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>{compact(likes)} likes</div>
+        {!hideStats && <div style={{ fontWeight: 600, marginBottom: 4 }}>{compact(likes)} likes</div>}
         <div>
           <span style={{ fontWeight: 600 }}>{handle}</span> <span style={{ whiteSpace: "pre-wrap" }}>{slot.copy}</span>
         </div>
-        <div style={{ color: IG.muted, marginTop: 6 }}>View all {compact(comments)} comments</div>
+        {!hideStats && <div style={{ color: IG.muted, marginTop: 6 }}>View all {compact(comments)} comments</div>}
         <div style={{ color: IG.muted, marginTop: 4, fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3 }}>{timeLabel} ago</div>
       </div>
     </article>
