@@ -16,6 +16,18 @@ export default function AssetsPage() {
 
   useEffect(() => { setAssets(loadAssets()); }, []);
 
+  // Sidebar "Library" items (All assets / Stills / Films) set the filter here.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => {
+      const f = sessionStorage.getItem("lc:assetFilter");
+      if (f === "all" || f === "image" || f === "video") setFilter(f);
+    };
+    apply();
+    window.addEventListener("lc:assetFilter", apply);
+    return () => window.removeEventListener("lc:assetFilter", apply);
+  }, []);
+
   const shown = assets.filter((a) =>
     filter === "all" ? true : filter === "video" ? isVid(a.contentType) : a.contentType === "image");
   const films = assets.filter((a) => isVid(a.contentType)).length;

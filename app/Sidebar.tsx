@@ -51,6 +51,15 @@ export default function Sidebar() {
     if (path !== "/") router.push("/");
   }
 
+  const [assetFilter, setAssetFilterState] = useState("all");
+  useEffect(() => { setAssetFilterState(sessionStorage.getItem("lc:assetFilter") || "all"); }, [path]);
+  function setAssetFilter(f: string) {
+    sessionStorage.setItem("lc:assetFilter", f);
+    setAssetFilterState(f);
+    if (path !== "/assets") router.push("/assets");
+    window.dispatchEvent(new Event("lc:assetFilter"));
+  }
+
   const onAssets = path.startsWith("/assets");
 
   // ── collapsed icon rail ──────────────────────────────────────────────────
@@ -167,10 +176,11 @@ export default function Sidebar() {
         ) : (
           <>
             <div className="side-label">Library</div>
-            {[{ ic: "layers", label: "All assets" }, { ic: "image", label: "Stills" }, { ic: "film", label: "Films" }].map((r) => (
-              <Link key={r.label} href="/assets" className="nav-item">
+            {[{ ic: "layers", label: "All assets", f: "all" }, { ic: "image", label: "Stills", f: "image" }, { ic: "film", label: "Films", f: "video" }].map((r) => (
+              <button key={r.label} onClick={() => setAssetFilter(r.f)} className="nav-item" data-active={assetFilter === r.f}
+                style={{ width: "100%", textAlign: "left", background: "transparent" }}>
                 <span className="nav-ico"><Ic name={r.ic} size={17} /></span> {r.label}
-              </Link>
+              </button>
             ))}
             <div className="side-label" style={{ marginTop: 8 }}>Tip</div>
             <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, padding: "2px 12px 8px" }}>
