@@ -2,9 +2,10 @@
 // Research the brand + what wins, THEN write the 7-day plan. This is the "what
 // do we post" brain. Grading/rewriting lives in critic.ts (owned by review).
 import type { WeekInputs, WeekPlan, DayPlan, ContentSlot, BrandContext } from "./types";
-import { PLATFORMS } from "./types";
+import { PLATFORMS, isEventMode } from "./types";
 import { claude, MODEL, extractJson } from "./llm";
 import { researchBrand, winningPatterns } from "./research";
+import { assessEventWeather } from "./weather";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 
 const SYSTEM = `You are the strategist for a small nonprofit's social launch.
@@ -17,10 +18,30 @@ You design to what WINS — the playbook below is real performance intel; follow
 
 function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string): string {
   const eventDay = inputs.eventWeekday || "Saturday";
+  const event = isEventMode(inputs);
+  const place = (inputs.location || "").trim();
+  const localBlock = event
+    ? `
+THIS IS AN IN-PERSON EVENT in ${place}. The whole week's job is to get the LOCAL
+audience to physically show up. So:
+- Write to people who live near ${place}. Name the place naturally (the neighborhood,
+  the landmark, the meeting spot) so it feels local, not generic.
+- Give concrete reasons to come in person: who they will meet, what they will see and
+  feel being there, how easy it is to get to, what to bring. Make missing it feel like
+  missing something real happening in their town.
+- The ${eventDay} CTA is to SHOW UP at ${place} (the website link is for details/RSVP).
+- In every mediaPrompt, set the scene in a recognizable ${place} setting with real
+  locals — the actual kind of place this happens (the beach, the park, the venue),
+  not a generic stock backdrop. Weave the brand colors in via what people wear / signage.`
+    : `
+THIS CTA POINTS TO THE WEBSITE (no physical location). Keep the ask online: click,
+sign up, donate, share. Do NOT invent a venue, address, or "come to" language.`;
   return `GOAL: ${inputs.goal}
 OVERALL CTA: ${inputs.cta}
 WEBSITE: ${inputs.website}
 HEADLINE EVENT DAY: ${eventDay}
+LOCATION: ${event ? place : "online / website (no physical location)"}
+${localBlock}
 
 THE BRAND (researched from their real site — stay true to it, never invent facts):
 - Name: ${brand.name}
@@ -56,14 +77,17 @@ Return ONLY JSON, no prose:
 }
 
 export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
-  const key = cacheKey(["week", inputs, MODEL, "v2-research"]);
+  const key = cacheKey(["week", inputs, MODEL, "v3-event"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
-  // Research the brand + what wins, concurrently — both feed the plan.
-  const [brand, playbook] = await Promise.all([
+  const event = isEventMode(inputs);
+  // Research the brand + what wins + (for in-person events) the forecast for the
+  // event day — all concurrently, since none depend on each other.
+  const [brand, playbook, weather] = await Promise.all([
     researchBrand(inputs.website, apiKey),
     winningPatterns(inputs.goal, inputs.cta, apiKey),
+    event ? assessEventWeather(inputs.location!, inputs.eventWeekday || "Saturday") : Promise.resolve(null),
   ]);
 
   const msg = await claude(apiKey).messages.create({
@@ -79,6 +103,7 @@ export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Pro
     inputs,
     brand,                       // the REAL researched brand (colors + logo + voice)
     playbook,
+    weather,                     // forecast + recommendation for go-to-place events
     days: (data.days || []).map((d: DayPlan) => ({
       ...d,
       slots: (d.slots || []).filter((s: ContentSlot) => PLATFORMS.includes(s.platform)),

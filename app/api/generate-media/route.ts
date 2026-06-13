@@ -10,7 +10,7 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { contentType, prompt, imageUrl, brandColors, review, intent } = body;
+    const { contentType, prompt, imageUrl, brandColors, review, intent, location } = body;
     const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
     if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
@@ -24,7 +24,13 @@ export async function POST(req: NextRequest) {
     const motion = contentType === "motion_video"
       ? "\n\nMotion style: kinetic launch energy — punchy camera moves, quick reveals, hype-cut feel (hyperframes / vibe-motion). Bold and modern."
       : "";
-    const branded = `${prompt}${palette}${motion}`;
+    // For in-person events, ground the scene in the real locale so it pulls the
+    // LOCAL audience (recognizable setting + locals), never generic stock.
+    const loc = typeof location === "string" && location.trim() &&
+      !["na", "n/a", "none", "online"].includes(location.trim().toLowerCase())
+      ? `\n\nLocation: set the scene in or around ${location.trim()} — a recognizable local setting with real locals, the actual kind of place this happens. Make a nearby viewer think "that's here."`
+      : "";
+    const branded = `${prompt}${palette}${motion}${loc}`;
 
     let url = "";
     let stillUrl = "";   // the keyframe behind a video — what the visual critic reviews

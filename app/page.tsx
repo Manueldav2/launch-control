@@ -3,15 +3,25 @@
 import { useState, useEffect, useRef } from "react";
 import { Ic, Mark, PlatformGlyph } from "./icons";
 import { savePlanLocal } from "./calendar/plan-store";
+import { WeatherWatchCard, LumaEventCard, LumaConnectModal } from "./EventControls";
+import type { WeatherWatch, LumaEvent } from "./EventControls";
+import { getLumaKey, setLumaKey } from "@/lib/client-luma";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
   platform: string; reaction: string; contentType: string; copy: string;
   mediaPrompt?: string; mediaUrl?: string; grade?: { pass: boolean; failures: string[] };
 };
-type Day = { day: number; weekday: string; cta: string; theme: string; isEventDay: boolean; slots: Slot[] };
-type Plan = { brand: { name: string; voice: string; summary: string; colors: string[] }; days: Day[] };
+type Day = { day: number; weekday: string; cta: string; theme: string; isEventDay: boolean; weatherNote?: string; slots: Slot[] };
+type PlanInputs = { goal: string; cta: string; website: string; eventWeekday?: string; location?: string };
+type Plan = { brand: { name: string; voice: string; summary: string; colors: string[] }; days: Day[]; inputs?: PlanInputs; weather?: WeatherWatch | null; luma?: LumaEvent | null };
 type Scorecard = { total: number; passing: number; fixed: number };
+
+// A launch is "go somewhere" when a real location is set (not NA / online).
+function isEventLocation(loc: string): boolean {
+  const l = (loc || "").trim().toLowerCase();
+  return !!l && !["na", "n/a", "none", "online"].includes(l);
+}
 
 // ─── display maps ─────────────────────────────────────────────────────────────
 const TYPE_LABEL: Record<string, string> = {
@@ -20,9 +30,9 @@ const TYPE_LABEL: Record<string, string> = {
 const PLATFORM_LABEL: Record<string, string> = { x: "X", linkedin: "LinkedIn", instagram: "Instagram" };
 
 const EXAMPLES = [
-  { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Sign up at the link to join the cleanup", website: "https://www.surfrider.org" },
-  { label: "Food drive", goal: "Fill 500 holiday meal boxes by Saturday's food drive", cta: "Donate or volunteer at the link", website: "https://www.feedingamerica.org" },
-  { label: "Charity 5k", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org" },
+  { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Come to the cleanup, 9am at the north lot", website: "https://www.surfrider.org", location: "Ocean Beach, San Francisco, CA" },
+  { label: "Food drive", goal: "Fill 500 holiday meal boxes by Saturday's food drive", cta: "Come pack boxes, or donate at the link", website: "https://www.feedingamerica.org", location: "Austin, TX" },
+  { label: "Charity 5k", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org", location: "Prospect Park, Brooklyn, NY" },
 ];
 const MISSION_PLACEHOLDERS = [
   "get 50 volunteers to our Saturday beach cleanup",
@@ -35,6 +45,7 @@ export default function Home() {
   const [goal, setGoal] = useState("");
   const [cta, setCta] = useState("");
   const [website, setWebsite] = useState("");
+  const [location, setLocation] = useState("");
   const [goalFocused, setGoalFocused] = useState(false);
   const typed = useTypewriter(MISSION_PLACEHOLDERS, !goal && !goalFocused);
   const [loading, setLoading] = useState(false);
@@ -42,21 +53,77 @@ export default function Home() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
+  // event-mode state
+  const [eventWeekday, setEventWeekday] = useState("Saturday");
+  const [weatherResolved, setWeatherResolved] = useState<{ action: string; note: string } | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
+  const [luma, setLuma] = useState<LumaEvent | null>(null);
+  const [lumaCreating, setLumaCreating] = useState(false);
+  const [lumaModal, setLumaModal] = useState(false);
+  const [lumaConnected, setLumaConnected] = useState(false);
+  useEffect(() => { setLumaConnected(!!getLumaKey()); }, []);
 
-  async function generate() {
+  // For an event-mode launch with Luma connected, spin up the real event page.
+  async function createLumaEvent(p: Plan, weekday: string) {
+    if (!getLumaKey() || !isEventLocation(location)) return;
+    setLumaCreating(true);
+    try {
+      const r = await fetch("/api/luma", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-luma-key": getLumaKey() },
+        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, brand: p.brand }),
+      });
+      const d = await r.json();
+      if (d.url || d.id) {
+        const ev: LumaEvent = d;
+        setLuma(ev);
+        const next = { ...p, luma: ev }; setPlan(next); savePlanLocal(next);
+      }
+    } catch { /* non-fatal: the week still ships without a Luma page */ }
+    setLumaCreating(false);
+  }
+
+  async function runGenerate(weekday = eventWeekday) {
     if (!goal.trim()) { setErr("Tell the crew what you're trying to accomplish first."); return; }
     setErr(""); setLoading(true); setPlan(null); setScorecard(null);
+    setWeatherResolved(null); setLuma(null);
     try {
       const r = await fetch("/api/generate-week", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal, cta, website }),
+        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "launch sequence failed");
       setPlan(d.plan); setScorecard(d.scorecard);
       savePlanLocal(d.plan); // flow the live week into /calendar + /channels
+      createLumaEvent(d.plan, weekday); // fire-and-fill; non-blocking
     } catch (e: any) { setErr(String(e.message || e)); }
     setLoading(false);
+  }
+  const generate = () => runGenerate();
+
+  // Weather decisions for the event day.
+  function rainPlan() {
+    if (!plan?.weather) return;
+    const note = plan.weather.rainPlanNote || "Rain or shine. Bring a layer, we will have cover.";
+    const next = structuredClone(plan);
+    const ev = next.days.find((d) => d.isEventDay);
+    if (ev) ev.weatherNote = note;
+    setPlan(next); savePlanLocal(next);
+    setWeatherResolved({ action: "rain_plan", note: `Rain plan added for ${plan.weather.weekday}: "${note}"` });
+  }
+  function proceedAnyway() {
+    if (!plan?.weather) return;
+    setWeatherResolved({ action: "proceed", note: `Posting ${plan.weather.weekday} as planned. We will keep watching the forecast.` });
+  }
+  async function reschedule() {
+    const alt = plan?.weather?.altDay;
+    if (!alt) return;
+    setRescheduling(true);
+    setEventWeekday(alt.weekday);
+    await runGenerate(alt.weekday);
+    setRescheduling(false);
+    setWeatherResolved({ action: "reschedule", note: `Moved the event to ${alt.weekday}. ${alt.condition}, ${alt.precipProb}% rain. The week was re-planned around it.` });
   }
 
   function loadSample() {
@@ -75,12 +142,12 @@ export default function Home() {
       try {
         const m = JSON.parse(raw);
         setPlan(null); setScorecard(null); setErr("");
-        setGoal(m.goal || ""); setCta(m.cta || ""); setWebsite(m.website || "");
+        setGoal(m.goal || ""); setCta(m.cta || ""); setWebsite(m.website || ""); setLocation(m.location || "");
         window.scrollTo({ top: 0, behavior: "smooth" });
       } catch {}
       sessionStorage.removeItem("lc:mission");
     };
-    const reset = () => { setPlan(null); setScorecard(null); setErr(""); setGoal(""); setCta(""); setWebsite(""); };
+    const reset = () => { setPlan(null); setScorecard(null); setErr(""); setGoal(""); setCta(""); setWebsite(""); setLocation(""); };
     const p = new URLSearchParams(window.location.search);
     if (p.get("demo") === "1" || window.location.hash === "#sample") { setPlan(SAMPLE_PLAN); setScorecard(SAMPLE_SCORE); }
     applyPending();
@@ -97,7 +164,8 @@ export default function Home() {
     try {
       const r = await fetch("/api/generate-media", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType: slot.contentType, prompt: slot.mediaPrompt || slot.copy }),
+        body: JSON.stringify({ contentType: slot.contentType, prompt: slot.mediaPrompt || slot.copy,
+          brandColors: plan.brand?.colors, location: plan.inputs?.location || location }),
       });
       const d = await r.json();
       if (d.url) {
@@ -156,6 +224,9 @@ export default function Home() {
                 <GhostInput
                   icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>}
                   value={website} onChange={setWebsite} placeholder="Website" />
+                <GhostInput
+                  icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>}
+                  value={location} onChange={setLocation} placeholder="Location (NA if online)" />
               </div>
               {/* toolbar */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px" }}>
@@ -167,6 +238,14 @@ export default function Home() {
                   Opus 4.8
                 </span>
                 <span style={{ fontSize: 12.5, color: "var(--faint)" }}>Strategist &amp; critic</span>
+                <button onClick={() => setLumaModal(true)} title={lumaConnected ? "Luma connected" : "Connect Luma to auto-create an event"} style={{
+                  display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, cursor: "pointer",
+                  color: lumaConnected ? "var(--go)" : "var(--muted)", background: "transparent",
+                  border: "1px solid var(--border)", borderRadius: 8, padding: "5px 9px",
+                }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 99, background: lumaConnected ? "var(--go)" : "var(--border-strong)" }} />
+                  {lumaConnected ? "Luma connected" : "Connect Luma"}
+                </button>
                 <button onClick={generate} disabled={loading} aria-label="Launch" style={{
                   marginLeft: "auto", width: 38, height: 38, borderRadius: 11, border: 0,
                   cursor: loading ? "default" : "pointer",
@@ -186,7 +265,7 @@ export default function Home() {
             {/* example missions */}
             <div style={{ display: "flex", gap: 9, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
               {EXAMPLES.map((ex) => (
-                <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); setErr(""); }}
+                <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); setLocation(ex.location || ""); setErr(""); }}
                   className="glass-btn" style={{
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--text)",
                     borderRadius: 11, padding: "8px 14px",
@@ -232,6 +311,11 @@ export default function Home() {
       {plan && scorecard && (
         <div style={{ paddingTop: 40 }}>
           <ReadinessBoard plan={plan} scorecard={scorecard} onReset={() => { setPlan(null); setScorecard(null); }} />
+          {(lumaCreating || luma) && <LumaEventCard luma={luma} creating={lumaCreating} />}
+          {plan.weather?.isBad && (
+            <WeatherWatchCard weather={plan.weather} resolution={weatherResolved} busy={rescheduling}
+              onReschedule={reschedule} onRainPlan={rainPlan} onProceed={proceedAnyway} />
+          )}
           {err && <p style={{ color: "var(--abort)", margin: "0 0 18px", fontSize: 13 }}>{err}</p>}
           <div style={{ display: "grid", gap: 14 }}>
             {plan.days.map((day, di) => (
@@ -241,6 +325,9 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <LumaConnectModal open={lumaModal} onClose={() => setLumaModal(false)}
+        onConnected={(k) => { setLumaKey(k); setLumaConnected(true); }} />
     </main>
   );
 }
@@ -371,6 +458,12 @@ function DayCard({ day, di, eventIndex, mediaBusy, onMakeMedia, isVid }: {
           <div style={{ fontSize: 13, color: "var(--clay-deep)", lineHeight: 1.35, marginTop: 2 }}>{day.cta}</div>
         </div>
       </div>
+      {day.weatherNote && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 18px", background: "rgba(189,93,58,0.08)", borderBottom: "1px solid rgba(189,93,58,0.2)", fontSize: 12.5, color: "var(--clay-deep)" }}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round"><path d="M7 17a4 4 0 010-8 5 5 0 019.6-1.3A3.5 3.5 0 0117 17H7z"/><path d="M8 20l-1 2M12 20l-1 2M16 20l-1 2"/></svg>
+          <span><strong style={{ fontWeight: 600 }}>Rain plan:</strong> {day.weatherNote}</span>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px,1fr))", gap: 1, background: "var(--border)" }}>
         {day.slots.map((slot, si) => (
           <SlotCard key={si} slot={slot} busy={mediaBusy === `${di}:${si}`}
@@ -537,6 +630,16 @@ const SAMPLE_PLAN: Plan = {
     voice: "Plainspoken, urgent, a little salty. No corporate gloss.",
     summary: "A grassroots coastal-conservation nonprofit rallying volunteers for a Saturday beach cleanup.",
     colors: ["#0a6cff", "#08c", "#0c2"],
+  },
+  inputs: { goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Come to the cleanup, 9am at the north lot", website: "https://www.surfrider.org", eventWeekday: "Saturday", location: "Ocean Beach, San Francisco, CA" },
+  weather: {
+    location: "San Francisco, California, US", eventDate: "2026-06-20", weekday: "Saturday",
+    condition: "Rain showers", precipProb: 70, tempMaxC: 14, windMaxKmh: 34,
+    isBad: true, severe: false,
+    summary: "Rain showers expected on Saturday (70% rain, ~57°F, wind 34 km/h).",
+    recommendation: "rain_plan",
+    rainPlanNote: "Rain or shine. Bring a poncho, we will have cover and hot coffee.",
+    altDay: { weekday: "Sunday", date: "2026-06-21", condition: "Mostly clear", precipProb: 10 },
   },
   days: [
     { day: 1, weekday: "Monday", theme: "Sound the alarm", cta: "Save the date: Saturday, 9am, Ocean Beach", isEventDay: false, slots: [

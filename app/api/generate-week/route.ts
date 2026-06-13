@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     const inputs: WeekInputs = {
       goal: body.goal, cta: body.cta, website: body.website,
       eventWeekday: body.eventWeekday || "Saturday",
+      location: body.location,
     };
 
     const plan = await generateWeekPlan(inputs, apiKey);
