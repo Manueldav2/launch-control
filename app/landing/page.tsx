@@ -139,7 +139,7 @@ export default function Landing() {
 
         <section className="lz-hero">
           <span className="lz-eyebrow lz-glass lz-up" style={{ animationDelay: "0.15s" }}>
-            <span className="dot" /> Launch Control · a Paradigm Outreach project
+            Launch Control · a Paradigm Outreach project
           </span>
           <h1 className="lz-h1">
             <span className="lz-line"><Chars text="A whole week of content," base={0.25} /></span>
@@ -158,10 +158,6 @@ export default function Landing() {
             </p>
             <div className="lz-actions lz-up" style={{ animationDelay: "1.72s" }}>
               <Link href="/" className="lz-primary">Start a launch <Ic name="arrowUp" size={16} /></Link>
-              <a href="#how" className="lz-scroll">
-                See the process
-                <span className="ring"><svg width="8" height="9" viewBox="0 0 8 9" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 1v6.5M1.2 5L4 7.7 6.8 5" /></svg></span>
-              </a>
             </div>
           </div>
           <Link href="/?demo=1" className="lz-card lz-glass lz-up" style={{ animationDelay: "1.4s" }}>
@@ -173,6 +169,11 @@ export default function Landing() {
             </div>
           </Link>
         </div>
+
+        <button className="lz-scrollcue" onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })} aria-label="Scroll to see how it works">
+          <span className="ring"><i /></span>
+          Scroll
+        </button>
       </main>
 
       {/* ── scroll story: the real components, how it works ── */}
