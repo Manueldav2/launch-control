@@ -24,6 +24,7 @@ type ConnectState = { accounts?: Array<{ channel?: string }>; connect?: Record<s
 export default function ChannelsHub() {
   const [plan, setPlan] = useState<WeekPlan | null>(null);
   const [conn, setConn] = useState<ConnectState>({ loaded: false, ok: false });
+  const [connecting, setConnecting] = useState<string | null>(null);
 
   useEffect(() => {
     setPlan(loadPlanLocal() || DEMO_WEEK);
@@ -39,10 +40,33 @@ export default function ChannelsHub() {
   if (plan) for (const d of plan.days) for (const s of d.slots) counts[s.platform] = (counts[s.platform] || 0) + 1;
   const isConnected = (p: Platform) => !!conn.accounts?.some((a) => a.channel === p);
 
+  // Start the OAuth connect flow for one platform. Opening must happen in the
+  // same click tick or Safari's popup blocker silently swallows it — so when we
+  // already have the URL we open it synchronously and fall back to a same-tab
+  // navigation (the standard OAuth pattern) if the popup was blocked. Only when
+  // we have no cached URL do we fetch one, then navigate this tab.
+  const openConnect = (url: string) => {
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    if (!w || w.closed) window.location.href = url; // popup blocked -> this tab
+  };
   const connect = (p: Platform) => {
     const url = conn.connect?.[p];
-    if (url) window.open(url, "_blank");
-    else window.open("/api/connect", "_blank");
+    if (url) { openConnect(url); return; }
+    setConnecting(p);
+    fetch("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: p }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.url) window.location.href = d.url;
+        else throw new Error(d?.error || "no connect url");
+      })
+      .catch(() => {
+        setConnecting(null);
+        alert(`Could not start the ${p} connection. Please try again.`);
+      });
   };
 
   return (
@@ -117,6 +141,7 @@ export default function ChannelsHub() {
                   <button
                     type="button"
                     onClick={() => connect(p)}
+                    disabled={connecting === p}
                     style={{
                       flex: "0 0 auto",
                       background: "transparent",
@@ -126,10 +151,11 @@ export default function ChannelsHub() {
                       fontSize: 13.5,
                       padding: "9px 16px",
                       borderRadius: 9,
-                      cursor: "pointer",
+                      cursor: connecting === p ? "wait" : "pointer",
+                      opacity: connecting === p ? 0.6 : 1,
                     }}
                   >
-                    Connect
+                    {connecting === p ? "Connecting…" : "Connect"}
                   </button>
                 )}
               </div>

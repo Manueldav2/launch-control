@@ -185,10 +185,11 @@ export default function Sidebar() {
           </Link>
         ))}
         <div style={{ padding: "4px 8px 12px" }}>
-          <button onClick={() => window.open("/api/connect", "_blank")} className="glass-btn" style={{
+          <Link href="/channels" className="glass-btn" style={{
             width: "100%", padding: "8px 12px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
             color: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-          }}><Ic name="broadcast" size={15} /> Connect channels</button>
+            textDecoration: "none", boxSizing: "border-box",
+          }}><Ic name="broadcast" size={15} /> Connect channels</Link>
         </div>
       </div>
 
