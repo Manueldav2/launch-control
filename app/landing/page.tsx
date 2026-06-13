@@ -90,15 +90,15 @@ function FlightRep() {
 }
 
 const PROC = [
-  { n: "01", title: "One sentence in", desc: "Give Launch Control the goal, the call to action, and a website. That is the entire brief.", visual: <ComposerRep />, label: "console · composer" },
-  { n: "02", title: "The crew goes to work", desc: "A strategist plots the seven-day arc to your event, then channel writers draft X, LinkedIn, and Instagram in parallel.", visual: <SequenceRep />, label: "launch sequence" },
-  { n: "03", title: "Graded before launch", desc: "A critic scores every draft for AI-tells and fabrication, rewrites the misses, and clears the whole week to go. Nothing ships until it is green.", visual: <ReadinessRep />, label: "readiness board" },
-  { n: "04", title: "A week, every channel", desc: "Seven days of on-brand posts, each timed to the event and ready to render into stills and film, then push live.", visual: <FlightRep />, label: "flight plan" },
+  { n: "01", title: "Start with one sentence", desc: "Your goal, your call to action, your website. That is the whole brief. No templates, no blank page.", visual: <ComposerRep />, label: "console · composer" },
+  { n: "02", title: "The crew plans and writes", desc: "A strategist maps the seven days that build to your event, then channel writers draft for X, LinkedIn, and Instagram in your voice.", visual: <SequenceRep />, label: "launch sequence" },
+  { n: "03", title: "The critic grades it", desc: "Every draft is scored for AI-tells and fabrication, then rewritten until it earns a pass. Nothing moves forward until the week is green.", visual: <ReadinessRep />, label: "readiness board" },
+  { n: "04", title: "You approve and schedule", desc: "Stills and film render on demand, then the week posts to your channels on the dates that matter.", visual: <FlightRep />, label: "flight plan" },
 ];
 
 export default function Landing() {
   useEffect(() => {
-    document.title = "Launch Control — a Paradigm Outreach project";
+    document.title = "Launch Control · a Paradigm Outreach project";
     const els = Array.from(document.querySelectorAll(".reveal"));
     const io = new IntersectionObserver((entries) => {
       entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } });
@@ -150,11 +150,11 @@ export default function Landing() {
 
         <div className="lz-bottom">
           <div>
-            <div className="lz-label lz-up" style={{ animationDelay: "1.5s" }}>Post a week of content in one step</div>
+            <div className="lz-label lz-up" style={{ animationDelay: "1.5s" }}>How it works</div>
             <p className="lz-desc lz-up" style={{ animationDelay: "1.6s" }}>
-              Give it one sentence. Launch Control plans, writes, films, grades, and schedules
-              a full week of posts for X, LinkedIn, and Instagram. You get a week of content,
-              ready to go live.
+              Tell the crew what you are promoting. It researches your brand, maps the days that
+              build to your event, drafts and films every post, and grades its own work. All you
+              do is approve and schedule.
             </p>
             <div className="lz-actions lz-up" style={{ animationDelay: "1.72s" }}>
               <Link href="/" className="lz-primary">Start a launch <Ic name="arrowUp" size={16} /></Link>
@@ -195,8 +195,8 @@ export default function Landing() {
       </div>
 
       <section className="lz-final reveal">
-        <h2>Post a whole week<br />of content?</h2>
-        <p className="sub">One sentence in. A full week of on-brand posts out, scheduled across every channel.</p>
+        <h2>See your week<br />in minutes.</h2>
+        <p className="sub">Give Launch Control one sentence. It brings back seven graded, on-brand days, ready to schedule.</p>
         <div className="lz-final-actions">
           <Link href="/" className="lz-primary">Start a launch <Ic name="arrowUp" size={16} /></Link>
           <Link href="/?demo=1" className="lz-cta">See a finished week <Ic name="arrowRight" size={15} /></Link>
