@@ -19,8 +19,9 @@ import type { ContentSlot, BrandContext, Platform } from "@/lib/types";
 export type PreviewProps = {
   slot: ContentSlot;
   brand?: Partial<BrandContext>;
-  /** "feed" = timeline density (default). "card" = slightly tighter for grids. */
-  size?: "feed" | "card";
+  /** "card" = standalone, bordered + rounded (default). "feed" = edge-to-edge
+   *  timeline row (no outer border/radius, bottom divider) for channel feeds. */
+  variant?: "card" | "feed";
   /** Relative timestamp shown in the header. Default "2h". */
   timeLabel?: string;
 };
@@ -244,7 +245,7 @@ function XAction({ icon, label, color }: { icon: React.ReactNode; label?: string
   );
 }
 
-function XPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function XPreview({ slot, brand, timeLabel = "2h", variant = "card" }: PreviewProps) {
   const name = brand?.name || "Your Brand";
   const handle = handleFromName(name);
   const likes = seedNum(slot.copy, 80, 4200);
@@ -252,17 +253,19 @@ function XPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
   const replies = Math.floor(likes / 11);
   const views = likes * seedNum(slot.copy + "v", 12, 30);
   const hasMedia = slot.contentType !== "text";
+  const feed = variant === "feed";
 
   return (
     <article
       style={{
         background: XC.bg,
         color: XC.text,
-        border: `1px solid ${XC.divider}`,
-        borderRadius: 16,
+        border: feed ? "none" : `1px solid ${XC.divider}`,
+        borderBottom: `1px solid ${XC.divider}`,
+        borderRadius: feed ? 0 : 16,
         padding: "14px 16px",
         fontFamily: XC.font,
-        maxWidth: 540,
+        maxWidth: feed ? "none" : 540,
         width: "100%",
       }}
     >
@@ -361,7 +364,8 @@ function LIButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function LinkedInPreview({ slot, brand, timeLabel = "2h", variant = "card" }: PreviewProps) {
+  const feed = variant === "feed";
   const name = brand?.name || "Your Brand";
   const subtitle =
     (brand?.summary && brand.summary.split(/[.\n]/)[0].trim().slice(0, 64)) ||
@@ -380,13 +384,13 @@ function LinkedInPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
       style={{
         background: LI.bg,
         color: LI.text,
-        border: `1px solid ${LI.divider}`,
-        borderRadius: 10,
+        border: feed ? "none" : `1px solid ${LI.divider}`,
+        borderRadius: feed ? 0 : 10,
         fontFamily: LI.font,
-        maxWidth: 540,
+        maxWidth: feed ? "none" : 540,
         width: "100%",
         overflow: "hidden",
-        boxShadow: "0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04)",
+        boxShadow: feed ? "none" : "0 0 0 1px rgba(0,0,0,0.02), 0 2px 6px rgba(0,0,0,0.04)",
       }}
     >
       {/* header */}
@@ -461,7 +465,8 @@ const IG = {
   font: '-apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
 };
 
-function InstagramPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
+function InstagramPreview({ slot, brand, timeLabel = "2h", variant = "card" }: PreviewProps) {
+  const feed = variant === "feed";
   const name = brand?.name || "Your Brand";
   const handle = handleFromName(name);
   const likes = seedNum(slot.copy, 120, 8400);
@@ -473,10 +478,11 @@ function InstagramPreview({ slot, brand, timeLabel = "2h" }: PreviewProps) {
       style={{
         background: IG.bg,
         color: IG.text,
-        border: `1px solid ${IG.divider}`,
-        borderRadius: 8,
+        border: feed ? "none" : `1px solid ${IG.divider}`,
+        borderBottom: `1px solid ${IG.divider}`,
+        borderRadius: feed ? 0 : 8,
         fontFamily: IG.font,
-        maxWidth: 470,
+        maxWidth: feed ? "none" : 470,
         width: "100%",
         overflow: "hidden",
       }}
