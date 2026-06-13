@@ -1,0 +1,26 @@
+{
+  "name": "launch-control",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Give an idea + a CTA + a website. A swarm of Claude agents plans, makes, and ships a whole week of on-brand launch content across every social channel, and grades its own work before it goes out.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "next": "15.5.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.6.0"
+  }
+}
