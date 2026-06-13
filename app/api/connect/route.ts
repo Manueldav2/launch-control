@@ -3,11 +3,19 @@
 // OAuth connect URL per platform. POST {platform} returns a single connect URL.
 import { NextRequest, NextResponse } from "next/server";
 import { resolveProfileId, connectedChannels, connectUrl } from "@/lib/zernio";
+import { getCachedFresh, setCached } from "@/lib/demo-cache";
 
 const PLATFORMS = ["x", "linkedin", "instagram", "tiktok"] as const;
+const CONNECT_TTL_MS = 5 * 60 * 1000; // sidebar/channels load instantly within this window
 
 export async function GET(req: NextRequest) {
   try {
+    // Serve the cached channel/sidebar payload so it loads instantly (no Zernio
+    // round-trip). ?fresh=1 forces a refresh (e.g. right after connecting one).
+    if (req.nextUrl.searchParams.get("fresh") !== "1") {
+      const hit = await getCachedFresh<Record<string, unknown>>("connect:v1", CONNECT_TTL_MS);
+      if (hit) return NextResponse.json({ ...hit, cached: true });
+    }
     const profileId = await resolveProfileId();
     const redirect = `${process.env.PUBLIC_BASE_URL || req.nextUrl.origin}/?connected=1`;
     const [accounts, ...urls] = await Promise.all([
@@ -16,7 +24,9 @@ export async function GET(req: NextRequest) {
     ]);
     const connect: Record<string, string> = {};
     PLATFORMS.forEach((p, i) => { connect[p] = urls[i]; });
-    return NextResponse.json({ profileId, accounts, connect });
+    const payload = { profileId, accounts, connect };
+    await setCached("connect:v1", payload);
+    return NextResponse.json(payload);
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
   }

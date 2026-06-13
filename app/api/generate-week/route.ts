@@ -7,6 +7,7 @@ import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
 import { fixRender } from "@/lib/visual-critic";
 import { generateImage } from "@/lib/fal";
 import { userIdFromRequest } from "@/lib/auth-server";
+import { cacheKeyFor, getCached, setCached } from "@/lib/demo-cache";
 import type { WeekInputs, ContentType } from "@/lib/types";
 
 export const maxDuration = 300;
@@ -26,17 +27,9 @@ function brandedPrompt(prompt: string, colors: string[], contentType: ContentTyp
 
 export async function POST(req: NextRequest) {
   try {
-    // Generation is gated on sign-in. Text (the week's copy) is unlimited for a
-    // signed-in account; media has a free quota (see /api/generate-media).
-    const userId = await userIdFromRequest(req);
-    if (!userId) return NextResponse.json({ error: "Create a free account to generate your launch week." }, { status: 401 });
-
     const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean; renderMedia?: boolean; apiKey?: string };
     if (!body.goal || !body.cta || !body.website)
       return NextResponse.json({ error: "goal, cta, and website are required" }, { status: 400 });
-
-    // The Anthropic key may come from the UI (header or body) and overrides env.
-    const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
 
     const inputs: WeekInputs = {
       goal: body.goal, cta: body.cta, website: body.website,
@@ -44,6 +37,21 @@ export async function POST(req: NextRequest) {
       competitors: body.competitors, // optional peer URLs to mine (no-op without Bright Data)
       location: body.location,
     };
+
+    // Cached result for this exact brief? Serve it instantly — no auth, no LLM,
+    // no critic, no media wait. This is what makes a repeated input (a demo
+    // preset) load the moment anyone clicks it.
+    const cacheKey = cacheKeyFor(inputs);
+    const cached = await getCached<{ plan: unknown; scorecard: unknown }>(cacheKey);
+    if (cached?.plan) return NextResponse.json({ plan: cached.plan, scorecard: cached.scorecard, cached: true });
+
+    // A novel brief requires sign-in (it spends the host's keys). Text (the
+    // week's copy) is unlimited for a signed-in account; media has a free quota.
+    const userId = await userIdFromRequest(req);
+    if (!userId) return NextResponse.json({ error: "Create a free account to generate your launch week." }, { status: 401 });
+
+    // The Anthropic key may come from the UI (header or body) and overrides env.
+    const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
 
     const plan = await generateWeekPlan(inputs, apiKey);
 
@@ -130,6 +138,8 @@ export async function POST(req: NextRequest) {
       ? { total, passing, fixed, mediaTotal, mediaPassing }
       : { total, passing, fixed };
 
+    // Cache the fresh result so the next identical brief is instant for anyone.
+    await setCached(cacheKey, { plan, scorecard });
     return NextResponse.json({ plan, scorecard });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });

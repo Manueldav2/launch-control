@@ -101,9 +101,21 @@ export default function Home() {
     setLumaCreating(false);
   }
 
+  // Cache a finished launch keyed by its inputs so the same brief is instant for
+  // anyone next time. Called after generation and after media renders, so the
+  // cached plan carries the rendered media URLs too. Best-effort, needs sign-in.
+  async function cachePlan(p: any, sc?: any) {
+    if (!p?.inputs?.goal) return;
+    try {
+      await fetch("/api/cache", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) },
+        body: JSON.stringify({ inputs: p.inputs, plan: p, scorecard: sc ?? scorecard }),
+      });
+    } catch { /* best-effort */ }
+  }
+
   async function runGenerate(weekday = eventWeekday) {
     if (!goal.trim()) { setErr("Tell the crew what you're trying to accomplish first."); return; }
-    if (!user) { setErr("Create a free account to generate your launch week."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-auth")); return; }
     setErr(""); setLoading(true); setPlan(null); setScorecard(null);
     setWeatherResolved(null); setLuma(null);
     try {
@@ -112,9 +124,17 @@ export default function Home() {
         body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, renderMedia: reviewMedia }),
       });
       const d = await r.json();
+      // Cached briefs come back instantly with no auth; a novel brief 401s ->
+      // prompt sign-in.
+      if (r.status === 401) {
+        setErr("Create a free account to generate your launch week.");
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-auth"));
+        setLoading(false); return;
+      }
       if (!r.ok) throw new Error(d.error || "launch sequence failed");
       setPlan(d.plan); setScorecard(d.scorecard);
       savePlanLocal(d.plan); // flow the live week into /calendar + /channels
+      if (!d.cached) cachePlan(d.plan, d.scorecard); // remember this brief for instant replays
       createLumaEvent(d.plan, weekday); // fire-and-fill; non-blocking
     } catch (e: any) { setErr(String(e.message || e)); }
     setLoading(false);
@@ -195,6 +215,7 @@ export default function Home() {
         next.days[di].slots[si].mediaUrl = d.url;
         setPlan(next);
         savePlanLocal(next); // keep calendar/channels in sync with rendered media
+        cachePlan(next); // update the cached brief with the rendered media
         const { saveAsset } = await import("@/lib/assets-store");
         saveAsset({ url: d.url, contentType: slot.contentType, platform: slot.platform,
           day: plan.days[di].weekday, brand: plan.brand?.name || "", caption: slot.copy.slice(0, 120) });
@@ -348,7 +369,7 @@ export default function Home() {
         <div style={{ paddingTop: 40 }}>
           <ReadinessBoard plan={plan} scorecard={scorecard} onReset={() => { setPlan(null); setScorecard(null); }} />
           <PublishBar plan={plan as any} keyHeader={keyHeaders()}
-            onPlanChange={(p: any) => { setPlan(p); savePlanLocal(p); }} />
+            onPlanChange={(p: any) => { setPlan(p); savePlanLocal(p); cachePlan(p); }} />
           {(lumaCreating || luma) && <LumaEventCard luma={luma} creating={lumaCreating} />}
           {plan.weather?.isBad && (
             <WeatherWatchCard weather={plan.weather} resolution={weatherResolved} busy={rescheduling}
