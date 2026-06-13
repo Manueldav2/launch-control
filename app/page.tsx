@@ -46,7 +46,7 @@ const TYPE_LABEL: Record<string, string> = {
 const PLATFORM_LABEL: Record<string, string> = { x: "X", linkedin: "LinkedIn", instagram: "Instagram" };
 
 const EXAMPLES = [
-  { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Come to the cleanup, 9am at the north lot", website: "https://www.surfrider.org", location: "Ocean Beach, San Francisco, CA" },
+  { label: "Beach cleanup", goal: "Get 100 volunteers to our Saturday Ocean Beach cleanup", cta: "RSVP to volunteer this Saturday, 9am at the Ocean Beach north lot", website: "https://surfrider.org", location: "Ocean Beach, San Francisco, CA" },
   { label: "Food drive", goal: "Fill 500 holiday meal boxes by Saturday's food drive", cta: "Come pack boxes, or donate at the link", website: "https://www.feedingamerica.org", location: "Austin, TX" },
   { label: "Charity 5k", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org", location: "Prospect Park, Brooklyn, NY" },
 ];

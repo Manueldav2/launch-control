@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Ic, Mark, PlatformGlyph } from "./icons";
 
 const RECENT = [
-  { label: "Beach cleanup", sub: "Surfrider", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Sign up at the link to join the cleanup", website: "https://www.surfrider.org" },
+  { label: "Beach cleanup", sub: "Surfrider", goal: "Get 100 volunteers to our Saturday Ocean Beach cleanup", cta: "RSVP to volunteer this Saturday, 9am at the Ocean Beach north lot", website: "https://surfrider.org" },
   { label: "Holiday food drive", sub: "Feeding America", goal: "Fill 500 holiday meal boxes by Saturday's food drive", cta: "Donate or volunteer at the link", website: "https://www.feedingamerica.org" },
   { label: "Clean-water 5k", sub: "charity: water", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org" },
 ];
