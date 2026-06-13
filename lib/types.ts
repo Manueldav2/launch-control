@@ -50,12 +50,14 @@ export interface BrandContext {
   mission: string;
   voice: string;
   colors: string[];
+  logo?: string; // logo/brand-mark URL pulled from the site
   summary: string; // one paragraph the model distilled from the site
 }
 
 export interface WeekPlan {
   inputs: WeekInputs;
   brand: BrandContext;
+  playbook?: string; // the researched "what wins" intel that shaped the plan
   days: DayPlan[];
   createdAt: string;
 }

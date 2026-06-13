@@ -1,127 +1,181 @@
 @import "tailwindcss";
 
-/* ─── Launch Control — mission console aesthetic ─────────────────────────────
-   Deep space near-black, ignition orange, telemetry mono. Atmosphere from a
-   faint grid, an engine glow behind the title, and a grain overlay. ───────── */
+/* ─── Launch Control — warm editorial base (claude.ai-adjacent) wearing a coat of
+   Apple "liquid glass". Ivory paper, one clay accent, an editorial serif, and
+   translucent refractive surfaces floating over a soft warm field. ──────────── */
 
 :root {
-  --void: #08080b;
-  --void-2: #0d0d12;
-  --panel: #111118;
-  --panel-2: #16161e;
-  --line: #23232e;
-  --line-bright: #32323f;
-  --fg: #f2f0ee;
-  --muted: #8a8a99;
-  --faint: #5a5a68;
+  --bg: #faf9f5;
+  --bg-2: #f3f1ea;
+  --card: #ffffff;
+  --ink: #1f1e1b;
+  --text: #3b3933;
+  --muted: #73716a;
+  --faint: #a6a39a;
+  --border: #e7e4da;
+  --border-strong: #d8d4c7;
 
-  --ignite: #ff6a1a;     /* primary — engine ignition orange */
-  --ignite-2: #ff8c42;   /* lighter flame */
-  --ember: #ffb27a;      /* warm highlight */
-  --go: #34d39a;         /* GO / passed */
-  --abort: #ff4d5e;      /* abort / failed */
-  --hold: #ffc24b;       /* hold / in progress */
+  --clay: #d97757;
+  --clay-deep: #bd5d3a;
+  --clay-bg: #f6ece6;
 
-  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Space Mono", ui-monospace, "SF Mono", monospace;
+  --go: #5a7d57;
+  --go-bg: #eaf0e6;
+  --abort: #c0543d;
+  --hold: #b98326;
+
+  --font-serif: "Newsreader", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Hanken Grotesk", ui-monospace, monospace;
+
+  --side-w: 264px;        /* folding sidebar width (JS-driven) */
+
+  /* legacy aliases for older views */
+  --void: var(--bg); --void-2: var(--bg-2);
+  --panel: var(--card); --panel-2: var(--bg-2);
+  --line: var(--border); --line-bright: var(--border-strong);
+  --fg: var(--ink);
+  --ignite: var(--clay); --ignite-2: #e0906f; --ember: var(--clay-deep);
 }
 
 * { box-sizing: border-box; }
 
 html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--void);
-  color: var(--fg);
-  font-family: var(--font-display);
+  margin: 0; padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* The whole stage: a deep radial vignette + a faint engineering grid. */
+/* Soft warm field behind the glass — gives the blur something to refract.
+   This is the main departure from claude.ai's flat canvas. */
 body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
+  content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
-    radial-gradient(1100px 700px at 50% -10%, rgba(255,106,26,0.10), transparent 60%),
-    radial-gradient(900px 900px at 100% 110%, rgba(255,140,66,0.05), transparent 55%),
-    linear-gradient(180deg, var(--void) 0%, var(--void-2) 100%);
-  pointer-events: none;
+    radial-gradient(46% 42% at 16% 8%, rgba(217,119,87,0.12), transparent 62%),
+    radial-gradient(40% 38% at 88% 14%, rgba(245,184,142,0.13), transparent 60%),
+    radial-gradient(52% 46% at 78% 92%, rgba(217,119,87,0.08), transparent 62%),
+    radial-gradient(40% 40% at 8% 88%, rgba(120,150,120,0.06), transparent 60%),
+    var(--bg);
 }
 body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.5;
   background-image:
-    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(circle at 50% 30%, black, transparent 80%);
-  pointer-events: none;
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,0.015) 1px, transparent 1px);
+  background-size: 4px 4px;
+  mix-blend-mode: multiply;
 }
 
-/* Grain overlay for texture. */
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.04;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* Type primitives */
-.mono { font-family: var(--font-mono); }
+.serif { font-family: var(--font-serif); font-weight: 400; }
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--faint);
+  font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
 }
+
+/* ─── Liquid glass ───────────────────────────────────────────────────────────
+   Layered: translucent warm fill + heavy backdrop blur/saturate + a bright top
+   specular edge + soft inner depth + outer drop. `.lg--refract` adds an SVG
+   displacement lens (Chromium) for the real "liquid" warp at the edges. */
+.lg {
+  position: relative;
+  background: rgba(255,253,248,0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(165%);
+  backdrop-filter: blur(16px) saturate(165%);
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    inset 0 -14px 28px -18px rgba(120,90,60,0.30),
+    0 22px 60px -28px rgba(70,55,40,0.30);
+}
+.lg--refract {
+  -webkit-backdrop-filter: blur(11px) saturate(165%) url(#lgDistort);
+  backdrop-filter: blur(11px) saturate(165%) url(#lgDistort);
+}
+/* the bright rim-light sweeping the top edge */
+.lg::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.5), transparent 38%);
+  -webkit-mask: linear-gradient(#000, transparent 40%);
+  mask: linear-gradient(#000, transparent 40%);
+  opacity: 0.7;
+}
+.lg-strong { background: rgba(255,252,246,0.72); }
+
+/* glassy interactive chip/button */
+.glass-btn {
+  background: rgba(255,253,248,0.5);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 6px 16px -10px rgba(70,55,40,0.35);
+  transition: transform .14s cubic-bezier(.4,0,.2,1), box-shadow .14s ease, background .14s ease;
+  cursor: pointer;
+}
+.glass-btn:hover { background: rgba(255,255,255,0.72); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 12px 24px -12px rgba(70,55,40,0.4); }
+.glass-btn:active { transform: translateY(0) scale(0.985); }
 
 /* Animations */
-@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes glowpulse { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
-@keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.25; } }
-@keyframes scan { from { transform: translateY(-100%); } to { transform: translateY(1200%); } }
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes flamewob { 0%,100% { transform: scale(1) translateY(0); opacity: 0.8; } 50% { transform: scale(1.06) translateY(-2px); opacity: 1; } }
-/* engine exhaust embers drifting upward */
-@keyframes emberrise {
-  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
-  10%  { opacity: var(--o, 0.5); }
-  90%  { opacity: var(--o, 0.5); }
-  100% { transform: translateY(-100vh) translateX(var(--dx, 0px)) scale(0.4); opacity: 0; }
-}
-/* charging-bar shimmer */
-@keyframes charge { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-/* horizontal sweep line on the overlay */
-@keyframes sweep { 0% { left: -30%; } 100% { left: 130%; } }
-/* overlay backdrop fade-in */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-/* log line entrance */
+@keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0.2; } }
+@keyframes charge { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes sweep { 0% { left: -30%; } 100% { left: 130%; } }
 @keyframes logline { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
-/* gentle float for hero content tiles */
-@keyframes float1 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-14px) rotate(calc(var(--r,0deg) + 1.5deg)); } }
-@keyframes float2 { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(12px) rotate(calc(var(--r,0deg) - 1.5deg)); } }
-@keyframes tilein { from { opacity: 0; transform: translateY(20px) scale(0.9) rotate(var(--r,0deg)); } to { opacity: 1; transform: translateY(0) scale(1) rotate(var(--r,0deg)); } }
+@keyframes softpulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+@keyframes spin360 { to { transform: rotate(360deg); } }
+@keyframes sheen { 0% { transform: translateX(-120%) skewX(-18deg); } 60%,100% { transform: translateX(320%) skewX(-18deg); } }
+@keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(0,-10px); } }
 
-.rise { animation: rise 0.6s cubic-bezier(0.2,0.7,0.2,1) both; }
+.rise { animation: rise 0.5s cubic-bezier(0.2,0.7,0.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
 
 /* Inputs */
-input, textarea {
-  font-family: var(--font-display);
-}
+input, textarea, button { font-family: var(--font-sans); color: inherit; }
 input:focus, textarea:focus { outline: none; }
+::placeholder { color: var(--faint); }
+::selection { background: rgba(217,119,87,0.22); }
 
-::selection { background: rgba(255,106,26,0.32); color: #fff; }
+/* ─── App shell: folding sidebar + offset content ───────────────────────────── */
+.app-shell { margin-left: var(--side-w); min-height: 100vh; transition: margin-left .42s cubic-bezier(.4,0,.2,1); }
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--side-w); z-index: 40;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: rgba(247,244,237,0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-right: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 1px 0 0 var(--border), 18px 0 50px -40px rgba(70,55,40,0.4);
+  transition: width .42s cubic-bezier(.4,0,.2,1);
+}
+.nav-item {
+  display: flex; align-items: center; gap: 12px; padding: 9px 11px; border-radius: 11px;
+  color: var(--text); text-decoration: none; font-size: 14px; font-weight: 500;
+  white-space: nowrap; cursor: pointer; border: 1px solid transparent;
+  transition: background .14s ease, color .14s ease, border-color .14s ease;
+}
+.nav-item:hover { background: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.7); }
+.nav-item[data-active="true"] {
+  background: rgba(217,119,87,0.12); color: var(--clay-deep); font-weight: 600;
+  border-color: rgba(217,119,87,0.28);
+}
+.nav-item svg { color: var(--muted); flex: 0 0 auto; }
+.nav-item[data-active="true"] svg { color: var(--clay-deep); }
+.nav-ico { width: 22px; display: flex; justify-content: center; flex: 0 0 auto; }
+.side-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--faint); padding: 8px 12px 5px; text-transform: uppercase; white-space: nowrap; }
+
+/* collapsed (mini) rail */
+.sidebar--mini .nav-label, .sidebar--mini .side-label, .sidebar--mini .wordmark-text, .sidebar--mini .foot-text { opacity: 0; pointer-events: none; }
+.sidebar--mini .nav-item { justify-content: center; padding: 9px; }
+
+@media (max-width: 900px) {
+  .app-shell { margin-left: 0; }
+  .sidebar { transform: translateX(-100%); }
+}
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--line-bright); border-radius: 6px; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -22,64 +22,46 @@ export default function AssetsPage() {
   const stills = assets.filter((a) => a.contentType === "image").length;
 
   return (
-    <main style={{ position: "relative", zIndex: 2, maxWidth: 1180, margin: "0 auto", padding: "0 24px 120px" }}>
-      <div className="grain" />
-
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "26px 0 30px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ position: "relative", width: 16, height: 16, display: "inline-block" }}>
-            <span style={{ position: "absolute", inset: 0, borderRadius: 99,
-              background: "radial-gradient(circle, var(--ignite-2), var(--ignite) 60%, transparent)",
-              boxShadow: "0 0 14px var(--ignite)", animation: "glowpulse 3s ease-in-out infinite" }} />
-          </span>
-          <span className="mono" style={{ fontSize: 12, letterSpacing: "0.16em", color: "var(--muted)" }}>LAUNCH&nbsp;CONTROL</span>
-        </div>
-        <nav style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <Link href="/" className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--faint)", textDecoration: "none" }}>CONSOLE</Link>
-          <span className="mono" style={{ fontSize: 11, letterSpacing: "0.14em", color: "var(--ignite)" }}>ASSETS</span>
-        </nav>
-      </header>
-
-      <section className="rise" style={{ marginBottom: 26 }}>
-        <p className="eyebrow" style={{ marginBottom: 10 }}>ASSET BAY · GENERATED MEDIA</p>
-        <h1 style={{ fontSize: "clamp(34px,5vw,52px)", fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1, margin: 0 }}>
-          Everything the crew<br /><span style={{ color: "var(--ignite)" }}>has filmed.</span>
+    <main style={{ position: "relative", zIndex: 2, maxWidth: 1100, margin: "0 auto", padding: "52px 28px 120px" }}>
+      <section className="rise" style={{ marginBottom: 28 }}>
+        <p className="eyebrow" style={{ marginBottom: 12 }}>Asset Bay · generated media</p>
+        <h1 className="serif" style={{ fontSize: "clamp(32px,4.2vw,48px)", fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.05, margin: 0, color: "var(--ink)" }}>
+          Everything the crew has made.
         </h1>
-        <p style={{ color: "var(--muted)", fontSize: 15, marginTop: 14, maxWidth: 560, lineHeight: 1.6 }}>
+        <p style={{ color: "var(--muted)", fontSize: 15.5, marginTop: 14, maxWidth: 540, lineHeight: 1.6 }}>
           Every still and film the engine renders lands here, ready to download or push live.
         </p>
       </section>
 
       {/* filter rail */}
-      <div className="rise" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        {([["all", `ALL · ${assets.length}`], ["image", `STILLS · ${stills}`], ["video", `FILMS · ${films}`]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setFilter(k as any)} className="mono" style={{
-            fontSize: 11, letterSpacing: "0.1em", cursor: "pointer", padding: "7px 14px", borderRadius: 99,
-            border: `1px solid ${filter === k ? "var(--ignite)" : "var(--line)"}`,
-            color: filter === k ? "var(--ember)" : "var(--muted)",
-            background: filter === k ? "rgba(255,106,26,0.07)" : "var(--panel)",
+      <div className="rise" style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 22, flexWrap: "wrap" }}>
+        {([["all", `All · ${assets.length}`], ["image", `Stills · ${stills}`], ["video", `Films · ${films}`]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setFilter(k as any)} style={{
+            fontSize: 13, cursor: "pointer", padding: "7px 14px", borderRadius: 10, fontWeight: 500,
+            border: `1px solid ${filter === k ? "var(--clay)" : "var(--border-strong)"}`,
+            color: filter === k ? "var(--clay-deep)" : "var(--text)",
+            background: filter === k ? "var(--clay-bg)" : "var(--card)",
           }}>{label}</button>
         ))}
         {assets.length > 0 && (
-          <button onClick={() => { clearAssets(); setAssets([]); }} className="mono" style={{
-            marginLeft: "auto", fontSize: 10.5, letterSpacing: "0.1em", cursor: "pointer", color: "var(--faint)",
-            background: "transparent", border: "1px solid var(--line-bright)", borderRadius: 8, padding: "7px 12px",
-          }}>↻ CLEAR</button>
+          <button onClick={() => { clearAssets(); setAssets([]); }} style={{
+            marginLeft: "auto", fontSize: 13, cursor: "pointer", color: "var(--muted)",
+            background: "transparent", border: "1px solid var(--border-strong)", borderRadius: 9, padding: "7px 13px",
+          }}>Clear</button>
         )}
       </div>
 
       {shown.length === 0 ? (
         <div className="rise" style={{
-          border: "1px dashed var(--line-bright)", borderRadius: 16, padding: "60px 24px", textAlign: "center",
+          border: "1px solid var(--border)", background: "var(--card)", borderRadius: 16, padding: "64px 24px", textAlign: "center",
         }}>
-          <p style={{ color: "var(--muted)", fontSize: 15, marginBottom: 18 }}>
-            No assets yet. Run a launch sequence and render the stills and films.
+          <p style={{ color: "var(--muted)", fontSize: 15.5, marginBottom: 20 }}>
+            No assets yet. Run a launch and render the stills and films.
           </p>
-          <Link href="/" className="mono" style={{
-            display: "inline-block", fontSize: 12, letterSpacing: "0.12em", color: "#160a02", textDecoration: "none",
-            background: "linear-gradient(180deg, var(--ignite-2), var(--ignite))", borderRadius: 10, padding: "12px 20px",
-            boxShadow: "0 14px 36px -14px rgba(255,106,26,0.6)",
-          }}>▲ TO THE CONSOLE</Link>
+          <Link href="/" style={{
+            display: "inline-block", fontSize: 14, fontWeight: 500, color: "#fff", textDecoration: "none",
+            background: "var(--clay)", borderRadius: 11, padding: "11px 20px",
+          }}>To the console</Link>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(248px,1fr))", gap: 14 }}>

@@ -1,60 +1,53 @@
 // ── CREATION (owned by Manuel) ──────────────────────────────────────────────
-// Research the brand + write the 7-day plan. This is the "what do we post"
-// brain. The grading/rewriting lives in critic.ts (owned by review).
-import type { WeekInputs, WeekPlan, DayPlan, ContentSlot } from "./types";
+// Research the brand + what wins, THEN write the 7-day plan. This is the "what
+// do we post" brain. Grading/rewriting lives in critic.ts (owned by review).
+import type { WeekInputs, WeekPlan, DayPlan, ContentSlot, BrandContext } from "./types";
 import { PLATFORMS } from "./types";
 import { claude, MODEL, extractJson } from "./llm";
+import { researchBrand, winningPatterns } from "./research";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
-
-async function fetchSiteText(url: string): Promise<string> {
-  try {
-    const u = url.startsWith("http") ? url : `https://${url}`;
-    const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0" } });
-    if (!r.ok) return "";
-    const html = await r.text();
-    return html
-      .replace(/<(script|style|noscript)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 6000);
-  } catch {
-    return "";
-  }
-}
 
 const SYSTEM = `You are the strategist for a small nonprofit's social launch.
 You plan a 7-day content calendar that builds to a headline event (e.g. a
 Saturday beach cleanup). You write copy a real person would post: specific,
 warm, human. You NEVER use em-dashes, hype words (delve, game-changer, unlock,
 seamless, leverage), fake statistics, or invented quotes. Every day shares ONE
-call to action across all platforms. Each platform aims at a distinct reaction.`;
+call to action across all platforms. Each platform aims at a distinct reaction.
+You design to what WINS — the playbook below is real performance intel; follow it.`;
 
-function planPrompt(inputs: WeekInputs, siteText: string): string {
+function planPrompt(inputs: WeekInputs, brand: BrandContext, playbook: string): string {
   const eventDay = inputs.eventWeekday || "Saturday";
   return `GOAL: ${inputs.goal}
 OVERALL CTA: ${inputs.cta}
 WEBSITE: ${inputs.website}
 HEADLINE EVENT DAY: ${eventDay}
 
-WHAT THEIR SITE SAYS (use it to stay on-brand, never invent facts):
-${siteText || "(could not read the site; rely on the goal/CTA only, invent nothing)"}
+THE BRAND (researched from their real site — stay true to it, never invent facts):
+- Name: ${brand.name}
+- Mission: ${brand.mission || "(infer from goal, invent nothing)"}
+- Voice: ${brand.voice}
+- Brand colors: ${brand.colors.join(", ")}
+${brand.summary ? `- Site context: ${brand.summary.slice(0, 500)}` : ""}
+
+WINNING PLAYBOOK (what actually performs for this CTA — design to this):
+${playbook || "(use proven cause-campaign instincts: specific human hooks, the demonstrable moment, one clear ask)"}
 
 Build a 7-day plan (Monday..Sunday). The week is a story that crescendos to the
 ${eventDay} event. For EACH day give: a single shared "cta" for that day, a one-line
 "theme", and one slot per platform (x, linkedin, instagram). For each slot:
 - "reaction": the specific feeling/action that post should provoke on that platform
 - "contentType": one of text | image | ugc_video | motion_video
-  (use ugc_video for a person-to-camera invite, motion_video for the launch/hype
-   beat, image for a poster/announcement, text otherwise; ~2-3 videos max across
-   the week, the rest images/text, since video is expensive)
+  (ugc_video = a person-to-camera invite; motion_video = the launch/hype beat with
+   kinetic brand graphics; image = a poster/announcement; text otherwise. Use ~3
+   videos across the week, the rest images/text, since video is expensive.)
 - "copy": the actual post, in the brand's voice, channel-appropriate length
-  (x <= 280 chars), with the day's CTA woven in. No AI-tells, no fabrication.
-- "mediaPrompt": for image/video slots only, a concrete visual prompt to render.
+  (x <= 280 chars), the day's CTA woven in. Follow the winning playbook per platform.
+- "mediaPrompt": for image/video slots, a concrete visual prompt. WEAVE THE BRAND
+  COLORS (${brand.colors.slice(0, 3).join(", ")}) into the scene naturally (clothing,
+  signage, props, on-screen text) so the media looks like THIS org.
 
 Return ONLY JSON, no prose:
 {
- "brand": {"name": "", "mission": "", "voice": "", "colors": ["#hex"], "summary": ""},
  "days": [
    {"day": 1, "weekday": "Monday", "cta": "", "theme": "", "isEventDay": false,
     "slots": [{"platform":"x","reaction":"","contentType":"text","copy":"","mediaPrompt":""}]}
@@ -62,24 +55,30 @@ Return ONLY JSON, no prose:
 }`;
 }
 
-export async function generateWeekPlan(inputs: WeekInputs): Promise<WeekPlan> {
-  const key = cacheKey(["week", inputs, MODEL]);
+export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
+  const key = cacheKey(["week", inputs, MODEL, "v2-research"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
-  const siteText = await fetchSiteText(inputs.website);
-  const msg = await claude().messages.create({
+  // Research the brand + what wins, concurrently — both feed the plan.
+  const [brand, playbook] = await Promise.all([
+    researchBrand(inputs.website, apiKey),
+    winningPatterns(inputs.goal, inputs.cta, apiKey),
+  ]);
+
+  const msg = await claude(apiKey).messages.create({
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM,
-    messages: [{ role: "user", content: planPrompt(inputs, siteText) }],
+    messages: [{ role: "user", content: planPrompt(inputs, brand, playbook) }],
   });
   const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
   const data = extractJson(text);
 
   const plan: WeekPlan = {
     inputs,
-    brand: data.brand,
+    brand,                       // the REAL researched brand (colors + logo + voice)
+    playbook,
     days: (data.days || []).map((d: DayPlan) => ({
       ...d,
       slots: (d.slots || []).filter((s: ContentSlot) => PLATFORMS.includes(s.platform)),

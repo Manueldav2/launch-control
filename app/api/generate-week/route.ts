@@ -10,16 +10,19 @@ export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean };
+    const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean; apiKey?: string };
     if (!body.goal || !body.cta || !body.website)
       return NextResponse.json({ error: "goal, cta, and website are required" }, { status: 400 });
+
+    // The Anthropic key may come from the UI (header or body) and overrides env.
+    const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
 
     const inputs: WeekInputs = {
       goal: body.goal, cta: body.cta, website: body.website,
       eventWeekday: body.eventWeekday || "Saturday",
     };
 
-    const plan = await generateWeekPlan(inputs);
+    const plan = await generateWeekPlan(inputs, apiKey);
 
     // Critic loop: grade every slot (deterministic + LLM checks), rewrite the
     // failures once, re-grade. `deep=true` adds the LLM fabrication/CTA pass.
@@ -32,13 +35,13 @@ export async function POST(req: NextRequest) {
       plan.days.flatMap((day) =>
         day.slots.map(async (slot) => {
           const det = gradeSlot(slot);
-          const llm = deep ? await gradeSlotLLM(slot, day.cta) : [];
+          const llm = deep ? await gradeSlotLLM(slot, day.cta, apiKey) : [];
           let failures = [...det.failures, ...llm];
           if (failures.length) {
             try {
-              slot.copy = await fixSlotCopy(slot, failures);
+              slot.copy = await fixSlotCopy(slot, failures, apiKey);
               const det2 = gradeSlot(slot);
-              const llm2 = deep ? await gradeSlotLLM(slot, day.cta) : [];
+              const llm2 = deep ? await gradeSlotLLM(slot, day.cta, apiKey) : [];
               failures = [...det2.failures, ...llm2];
               fixed++;
             } catch {

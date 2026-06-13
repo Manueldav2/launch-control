@@ -39,12 +39,14 @@ export function gradeSlot(slot: ContentSlot): SlotGrade {
 // nor missing a CTA" must NOT trip the flags (a false failure here forces a
 // pointless rewrite, since the route concatenates these straight into failures).
 //
+// `apiKey` (optional) threads a per-request UI key through to `ask`.
 // `grounding` is optional and backward-compatible: pass the brand/site summary
 // and the model can judge real groundedness; omit it and it only flags concrete
 // invented specifics (a precise stat/quote/client it could not have known).
 export async function gradeSlotLLM(
   slot: ContentSlot,
   cta: string,
+  apiKey?: string,
   grounding?: string,
 ): Promise<string[]> {
   try {
@@ -53,6 +55,7 @@ export async function gradeSlotLLM(
       : "";
     const out = await ask({
       maxTokens: 40,
+      apiKey,
       system:
         "You are a strict launch-copy critic. Reply in EXACTLY this form and " +
         "nothing else:\nFABRICATED: yes|no\nNO_CTA: yes|no",
@@ -84,9 +87,10 @@ export function parseCriticVerdict(out: string): string[] {
 }
 
 // Rewrite one failing slot's copy (the regenerate half of the self-correct loop).
-export async function fixSlotCopy(slot: ContentSlot, failures: string[]): Promise<string> {
+export async function fixSlotCopy(slot: ContentSlot, failures: string[], apiKey?: string): Promise<string> {
   return (await ask({
     maxTokens: 400,
+    apiKey,
     system:
       "You rewrite social posts to pass review. No em-dashes, no hype words, " +
       "no fabrication. Keep the intent and the CTA. Respect channel limits " +
