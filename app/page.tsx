@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { Ic, Mark, PlatformGlyph } from "./icons";
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type Slot = {
@@ -16,21 +17,6 @@ const TYPE_LABEL: Record<string, string> = {
   text: "Text", image: "Still", ugc_video: "UGC film", motion_video: "Launch film",
 };
 const PLATFORM_LABEL: Record<string, string> = { x: "X", linkedin: "LinkedIn", instagram: "Instagram" };
-
-function PlatformGlyph({ p, size = 14 }: { p: string; size?: number }) {
-  const c = { width: size, height: size, fill: "currentColor" } as const;
-  if (p === "x") return <svg viewBox="0 0 24 24" {...c}><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>;
-  if (p === "linkedin") return <svg viewBox="0 0 24 24" {...c}><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452z"/></svg>;
-  return <svg viewBox="0 0 24 24" {...c}><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>;
-}
-
-function Spark({ size = 26 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="var(--clay)" aria-hidden>
-      <path d="M12 2c.3 3.1.9 5.2 2 6.4C15.2 9.6 17.3 10.2 20 10.5c-2.7.3-4.8.9-6 2.1-1.1 1.2-1.7 3.3-2 6.4-.3-3.1-.9-5.2-2-6.4-1.2-1.2-3.3-1.8-6-2.1 2.7-.3 4.8-.9 6-2.1 1.1-1.2 1.7-3.3 2-6.4z" />
-    </svg>
-  );
-}
 
 const EXAMPLES = [
   { label: "Beach cleanup", goal: "Get 50 volunteers to our Saturday beach cleanup", cta: "Sign up at the link to join the cleanup", website: "https://www.surfrider.org" },
@@ -76,13 +62,29 @@ export default function Home() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Deep link: /?demo=1 or #sample drops straight into a finished, all-go week.
+  // Deep link + sidebar wiring. /?demo=1 (or #sample) opens a finished week.
+  // Recent-mission clicks (sidebar) drop the mission in via sessionStorage +
+  // an "lc:mission" event; "New launch" resets everything via "lc:new".
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const applyPending = () => {
+      const raw = sessionStorage.getItem("lc:mission");
+      if (!raw) return;
+      try {
+        const m = JSON.parse(raw);
+        setPlan(null); setScorecard(null); setErr("");
+        setGoal(m.goal || ""); setCta(m.cta || ""); setWebsite(m.website || "");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {}
+      sessionStorage.removeItem("lc:mission");
+    };
+    const reset = () => { setPlan(null); setScorecard(null); setErr(""); setGoal(""); setCta(""); setWebsite(""); };
     const p = new URLSearchParams(window.location.search);
-    if (p.get("demo") === "1" || window.location.hash === "#sample") {
-      setPlan(SAMPLE_PLAN); setScorecard(SAMPLE_SCORE);
-    }
+    if (p.get("demo") === "1" || window.location.hash === "#sample") { setPlan(SAMPLE_PLAN); setScorecard(SAMPLE_SCORE); }
+    applyPending();
+    window.addEventListener("lc:mission", applyPending);
+    window.addEventListener("lc:new", reset);
+    return () => { window.removeEventListener("lc:mission", applyPending); window.removeEventListener("lc:new", reset); };
   }, []);
 
   async function makeMedia(di: number, si: number) {
@@ -119,8 +121,8 @@ export default function Home() {
       {!plan && (
         <section style={{ minHeight: "calc(100vh - 40px)", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: 40, paddingBottom: 60 }}>
           <div className="rise" style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
-              <Spark size={30} />
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18, animation: "drift 6s ease-in-out infinite" }}>
+              <Mark size={38} />
             </div>
             <h1 className="serif" style={{ fontSize: "clamp(32px, 4.4vw, 50px)", fontWeight: 400, letterSpacing: "-0.015em", color: "var(--ink)", margin: 0, lineHeight: 1.08 }}>
               Let&apos;s launch your week.
@@ -131,13 +133,9 @@ export default function Home() {
             </p>
           </div>
 
-          {/* composer */}
+          {/* composer — liquid glass */}
           <div className="rise" style={{ animationDelay: "80ms" }}>
-            <div style={{
-              background: "var(--card)", border: "1px solid var(--border-strong)", borderRadius: 22,
-              boxShadow: "0 1px 2px rgba(50,45,30,0.04), 0 12px 32px -16px rgba(50,45,30,0.14)",
-              padding: "6px 6px 0",
-            }}>
+            <div className="lg lg--refract" style={{ borderRadius: 24, padding: "6px 6px 0" }}>
               <textarea
                 value={goal} onChange={(e) => setGoal(e.target.value)}
                 onFocus={() => setGoalFocused(true)} onBlur={() => setGoalFocused(false)}
@@ -186,42 +184,41 @@ export default function Home() {
             <div style={{ display: "flex", gap: 9, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
               {EXAMPLES.map((ex) => (
                 <button key={ex.label} onClick={() => { setGoal(ex.goal); setCta(ex.cta); setWebsite(ex.website); setErr(""); }}
-                  style={{
+                  className="glass-btn" style={{
                     display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--text)",
-                    background: "var(--card)", border: "1px solid var(--border-strong)", borderRadius: 10,
-                    padding: "8px 13px", cursor: "pointer", transition: "background .12s ease",
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-2)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--card)"; }}>
-                  <span style={{ color: "var(--clay-deep)", display: "flex" }}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-                  </span>
+                    borderRadius: 11, padding: "8px 14px",
+                  }}>
+                  <span style={{ color: "var(--clay-deep)", display: "flex" }}><Ic name="bolt" size={14} /></span>
                   {ex.label}
                 </button>
               ))}
-              <button onClick={loadSample} style={{
-                fontSize: 13.5, color: "var(--clay-deep)", background: "transparent", border: 0,
-                padding: "8px 6px", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3,
+              <button onClick={loadSample} className="glass-btn" style={{
+                display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13.5, color: "var(--clay-deep)",
+                fontWeight: 600, borderRadius: 11, padding: "8px 14px",
               }}>
-                Watch a finished sample
+                <Ic name="play" size={13} /> Watch a finished sample <Ic name="arrowRight" size={14} />
               </button>
             </div>
             {err && <p style={{ textAlign: "center", color: "var(--abort)", marginTop: 16, fontSize: 13.5 }}>{err}</p>}
           </div>
 
           {/* how it works */}
-          <div className="rise" style={{ animationDelay: "160ms", marginTop: 72, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 22 }}>
+          <div className="rise" style={{ animationDelay: "160ms", marginTop: 64, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14 }}>
             {[
-              { t: "Plot the arc", d: "The strategist reads your site and lays seven days of themes that build to the event." },
-              { t: "Draft on-brand", d: "Channel writers draft every X, LinkedIn, and Instagram post in your real voice." },
-              { t: "Grade before launch", d: "The critic scores each draft, rewrites the misses, and clears the week to go." },
+              { ic: "target", t: "Plot the arc", d: "The strategist reads your site and lays seven days of themes that build to the event." },
+              { ic: "pen", t: "Draft on-brand", d: "Channel writers draft every X, LinkedIn, and Instagram post in your real voice." },
+              { ic: "check", t: "Grade before launch", d: "The critic scores each draft, rewrites the misses, and clears the week to go." },
             ].map((s, i) => (
-              <div key={s.t}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
-                  <span className="serif" style={{ fontSize: 16, fontStyle: "italic", color: "var(--clay-deep)" }}>{i + 1}</span>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>{s.t}</span>
+              <div key={s.t} className="lg" style={{ borderRadius: 16, padding: 18 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                  <span style={{
+                    width: 30, height: 30, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "rgba(217,119,87,0.13)", color: "var(--clay-deep)", flex: "0 0 auto",
+                  }}><Ic name={s.ic} size={16} /></span>
+                  <span className="serif" style={{ fontSize: 13, fontStyle: "italic", color: "var(--faint)" }}>{`0${i + 1}`}</span>
                 </div>
-                <p style={{ fontSize: 13.5, color: "var(--muted)", lineHeight: 1.55, margin: 0 }}>{s.d}</p>
+                <div style={{ fontSize: 15.5, fontWeight: 600, color: "var(--ink)", marginBottom: 5 }}>{s.t}</div>
+                <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.55, margin: 0 }}>{s.d}</p>
               </div>
             ))}
           </div>
@@ -476,7 +473,7 @@ function LaunchSequence({ goal, website }: { goal: string; website: string }) {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Spark size={18} />
+            <Mark size={20} />
             <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--clay-deep)" }}>The crew is working</span>
           </span>
           <span style={{ fontSize: 13, color: "var(--muted)" }}>{Math.round(pct)}%</span>
