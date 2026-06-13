@@ -50,7 +50,10 @@ export default function Landing() {
       <main className="lz-main">
         {/* header */}
         <header className="lz-head lz-up" style={{ animationDelay: "0.05s" }}>
-          <div className="lz-brand"><Mark size={26} /> Launch&nbsp;Control</div>
+          <div className="lz-brand">
+            <Mark size={26} /> Launch&nbsp;Control
+            <span style={{ fontSize: 12.5, fontWeight: 500, color: "rgba(255,255,255,0.5)", marginLeft: 4, borderLeft: "1px solid rgba(255,255,255,0.2)", paddingLeft: 10 }}>by Paradigm</span>
+          </div>
           <nav className="lz-pill" aria-label="Primary">
             {NAV.map((n) => (
               <a key={n.label} href={n.href}>{n.label}{n.badge && <span className="lz-badge">{n.badge}</span>}</a>
@@ -62,7 +65,7 @@ export default function Landing() {
         {/* hero */}
         <section className="lz-hero">
           <span className="lz-eyebrow lz-glass lz-up" style={{ animationDelay: "0.15s" }}>
-            <span className="dot" /> A Paradigm Outreach project
+            <span className="dot" /> Launch Control · a Paradigm project
           </span>
           <h1 className="lz-h1">
             <span className="lz-line"><Chars text="A whole week of launch," base={0.25} /></span>
