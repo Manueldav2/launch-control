@@ -12,6 +12,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { WeekPlan, Platform } from "@/lib/types";
 import { loadPlanLocal, DEMO_WEEK } from "../calendar/plan-store";
+import { LumaMark } from "../EventControls";
+import { getLumaKey } from "@/lib/client-luma";
 
 const PLATFORMS: Array<{ p: Platform; label: string; color: string; glyph: React.ReactNode; blurb: string }> = [
   { p: "x", label: "X", color: "#0f0f0f", blurb: "Timeline · short, punchy, scroll-stopping", glyph: <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.4l13.2 17.3z"/></svg> },
@@ -25,8 +27,10 @@ export default function ChannelsHub() {
   const [plan, setPlan] = useState<WeekPlan | null>(null);
   const [conn, setConn] = useState<ConnectState>({ loaded: false, ok: false });
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [lumaConnected, setLumaConnected] = useState(false);
 
   useEffect(() => {
+    setLumaConnected(!!getLumaKey());
     setPlan(loadPlanLocal() || DEMO_WEEK);
     let alive = true;
     fetch("/api/connect")
@@ -162,6 +166,22 @@ export default function ChannelsHub() {
             </div>
           );
         })}
+      </div>
+
+      {/* Luma — events channel (separate integration from the social channels) */}
+      <div style={{ marginTop: 16, background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: 18, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+        <span style={{ flex: "0 0 auto", display: "flex" }}><LumaMark size={40} radius={10} /></span>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "var(--ink)" }}>Luma</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>Events · live event pages for launches with a date and place</div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, marginTop: 6, color: lumaConnected ? "var(--go)" : "var(--muted)" }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: lumaConnected ? "var(--go)" : "var(--border-strong)" }} />
+            {lumaConnected ? "Connected" : "Not connected"}
+          </div>
+        </div>
+        <Link href="/channels/luma" style={{ flex: "0 0 auto", textAlign: "center", textDecoration: "none", background: "var(--clay)", color: "#fff", fontWeight: 600, fontSize: 13.5, padding: "9px 18px", borderRadius: 9 }}>
+          Open channel
+        </Link>
       </div>
 
       <div style={{ marginTop: 22, fontSize: 12.5 }}>
