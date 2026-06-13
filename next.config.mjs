@@ -7,6 +7,7 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/generate-media": [
       "node_modules/ffmpeg-static/**",
+      "node_modules/@napi-rs/**",
       "assets/fonts/**",
     ],
   },
