@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ContentSlot, DayPlan, WeekPlan, Platform } from "@/lib/types";
 import { PlatformPreview } from "../previews/PlatformPreview";
-import { loadPlanLocal } from "./plan-store";
+import { loadPlanLocal, DEMO_WEEK } from "./plan-store";
 
 const PLATFORM_META: Record<string, { label: string; color: string; glyph: React.ReactNode }> = {
   x: {
@@ -403,7 +403,7 @@ export default function CalendarPage() {
   const [profiles, setProfiles] = useState<Record<string, any>>({});
 
   useEffect(() => {
-    setPlan(loadPlanLocal());
+    setPlan(loadPlanLocal() || DEMO_WEEK); // always show the weekday calendar grid (saved plan, else a sample week)
     let alive = true;
     fetch("/api/posts?all=1")
       .then((r) => (r.ok ? r.json() : {}))
