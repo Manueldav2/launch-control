@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Minimal line icons — no icon dep, keeps the bundle clean and the look bespoke.
-function Icon({ d, size = 17 }: { d: string; size?: number }) {
+function Icon({ d, size = 16 }: { d: string; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
@@ -13,94 +12,79 @@ function Icon({ d, size = 17 }: { d: string; size?: number }) {
   );
 }
 
+// Anthropic-style asterisk mark, in clay.
+function Spark({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="var(--clay)" aria-hidden>
+      <path d="M12 2c.3 3.1.9 5.2 2 6.4C15.2 9.6 17.3 10.2 20 10.5c-2.7.3-4.8.9-6 2.1-1.1 1.2-1.7 3.3-2 6.4-.3-3.1-.9-5.2-2-6.4-1.2-1.2-3.3-1.8-6-2.1 2.7-.3 4.8-.9 6-2.1 1.1-1.2 1.7-3.3 2-6.4z" />
+    </svg>
+  );
+}
+
 const NAV = [
-  { href: "/", label: "Console", d: "M4 5h16M4 12h16M4 19h10" },
+  { href: "/", label: "New launch", d: "M12 5v14M5 12h14" },
+  { href: "/", label: "Console", d: "M4 6h16M4 12h16M4 18h10", match: "/" },
   { href: "/assets", label: "Asset Bay", d: "M3 8l9-5 9 5-9 5-9-5zm0 8l9 5 9-5M3 12l9 5 9-5" },
 ];
 
-// The swarm, surfaced as a standing roster. Honest: each is a real pipeline step.
 const CREW = [
-  { role: "Strategist", note: "plots the 7-day arc" },
-  { role: "X Writer", note: "drafts every X post" },
-  { role: "LinkedIn Writer", note: "drafts LinkedIn" },
-  { role: "Instagram Writer", note: "drafts Instagram" },
-  { role: "Critic", note: "grades + rewrites" },
-  { role: "Media", note: "renders film + stills" },
+  "Strategist", "X Writer", "LinkedIn Writer", "Instagram Writer", "Critic", "Media",
 ];
 
 export default function Sidebar() {
   const path = usePathname();
   return (
     <aside className="sidebar">
-      {/* brand */}
-      <div style={{ padding: "22px 18px 18px", borderBottom: "1px solid var(--line)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-          <span style={{ position: "relative", width: 26, height: 26, flex: "0 0 auto" }}>
-            <span style={{
-              position: "absolute", inset: 0, borderRadius: 8,
-              background: "radial-gradient(circle at 35% 30%, var(--ignite-2), var(--ignite) 62%, #b53d05)",
-              boxShadow: "0 0 18px rgba(255,106,26,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
-              animation: "glowpulse 4s ease-in-out infinite",
-            }} />
-          </span>
-          <div style={{ lineHeight: 1.1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: "-0.01em" }}>Launch Control</div>
-            <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.14em", color: "var(--faint)", marginTop: 2 }}>SOCIAL LAUNCH ENGINE</div>
-          </div>
-        </div>
+      {/* wordmark */}
+      <div style={{ padding: "18px 16px 10px", display: "flex", alignItems: "center", gap: 9 }}>
+        <Spark size={20} />
+        <span className="serif" style={{ fontSize: 20, color: "var(--ink)", fontWeight: 500, letterSpacing: "-0.01em" }}>Launch Control</span>
       </div>
 
-      {/* new mission */}
-      <div style={{ padding: "16px 16px 8px" }}>
-        <Link href="/" className="mono" style={{
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          padding: "11px 14px", borderRadius: 11, textDecoration: "none",
-          fontSize: 12, letterSpacing: "0.12em", fontWeight: 700, color: "#160a02",
-          background: "linear-gradient(180deg, var(--ignite-2), var(--ignite))",
-          boxShadow: "0 12px 30px -12px rgba(255,106,26,0.6), inset 0 1px 0 rgba(255,255,255,0.4)",
-        }}>
-          <Icon d="M12 5v14M5 12h14" size={15} /> NEW MISSION
+      {/* primary nav */}
+      <nav style={{ padding: "8px 10px 4px", display: "flex", flexDirection: "column", gap: 2 }}>
+        <Link href="/" className="nav-item" data-active={path === "/"}>
+          <Icon d="M4 6h16M4 12h16M4 18h10" /> Console
         </Link>
-      </div>
-
-      {/* nav */}
-      <nav style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-        <div className="eyebrow" style={{ padding: "8px 12px 6px", fontSize: 9.5 }}>Workspace</div>
-        {NAV.map((n) => {
-          const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
-          return (
-            <Link key={n.href} href={n.href} className="nav-item" data-active={active}>
-              <Icon d={n.d} /> {n.label}
-            </Link>
-          );
-        })}
+        <Link href="/assets" className="nav-item" data-active={path.startsWith("/assets")}>
+          <Icon d="M3 8l9-5 9 5-9 5-9-5zm0 8l9 5 9-5M3 12l9 5 9-5" /> Asset Bay
+        </Link>
       </nav>
 
       {/* the crew */}
-      <div style={{ padding: "14px 16px 8px", marginTop: 6 }}>
-        <div className="eyebrow" style={{ marginBottom: 10, fontSize: 9.5 }}>The Crew · 6 agents</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ padding: "16px 10px 4px" }}>
+        <div className="side-label">The crew</div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
           {CREW.map((c) => (
-            <div key={c.role} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--go)", boxShadow: "0 0 6px var(--go)", flex: "0 0 auto" }} />
-              <span style={{ fontSize: 12.5, color: "var(--fg)", fontWeight: 500 }}>{c.role}</span>
-              <span className="mono" style={{ fontSize: 9.5, color: "var(--faint)", marginLeft: "auto", letterSpacing: "0.02em" }}>{c.note}</span>
+            <div key={c} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 11px", fontSize: 13.5, color: "var(--text)" }}>
+              <span style={{ width: 6, height: 6, borderRadius: 99, background: "var(--go)", flex: "0 0 auto" }} />
+              {c}
             </div>
           ))}
         </div>
       </div>
 
-      {/* footer / systems */}
-      <div style={{ marginTop: "auto", padding: 16, borderTop: "1px solid var(--line)" }}>
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 12px", borderRadius: 10, background: "rgba(52,211,154,0.06)",
-          border: "1px solid rgba(52,211,154,0.22)",
-        }}>
-          <span className="mono" style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--go)" }}>● SYSTEMS NOMINAL</span>
-          <span className="mono" style={{ fontSize: 9, color: "var(--faint)" }}>v1.0</span>
+      {/* recents (illustrative — recent missions) */}
+      <div style={{ padding: "14px 10px 4px", flex: 1, overflowY: "auto" }}>
+        <div className="side-label">Recent missions</div>
+        {["Beach cleanup · Surfrider", "Holiday food drive", "Clean-water 5k"].map((r) => (
+          <div key={r} className="nav-item" style={{ color: "var(--muted)", fontWeight: 500, cursor: "default" }}>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* footer */}
+      <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{
+          width: 30, height: 30, borderRadius: 99, flex: "0 0 auto",
+          background: "var(--clay)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 12, fontWeight: 700,
+        }}>MD</span>
+        <div style={{ lineHeight: 1.25 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Myles David</div>
+          <div style={{ fontSize: 11.5, color: "var(--faint)" }}>Built with Claude · Opus 4.8</div>
         </div>
-        <div className="eyebrow" style={{ marginTop: 12, textAlign: "center", fontSize: 9 }}>Built with Claude · Opus 4.8</div>
       </div>
     </aside>
   );
