@@ -12,7 +12,7 @@ const RECENT = [
   { label: "Clean-water 5k", sub: "charity: water", goal: "Sell out our Saturday charity 5k for clean water", cta: "Register at the link before spots run out", website: "https://www.charitywater.org" },
 ];
 const CREW = ["Strategist", "X Writer", "LinkedIn Writer", "Instagram Writer", "Critic", "Media"];
-const CHANNELS = [{ p: "x", label: "X" }, { p: "linkedin", label: "LinkedIn" }, { p: "instagram", label: "Instagram" }];
+const CHANNELS = [{ p: "x", label: "X" }, { p: "linkedin", label: "LinkedIn" }, { p: "instagram", label: "Instagram" }, { p: "tiktok", label: "TikTok" }, { p: "luma", label: "Luma" }];
 
 export default function Sidebar() {
   const path = usePathname();
