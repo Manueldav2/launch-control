@@ -175,6 +175,125 @@ input:focus, textarea:focus { outline: none; }
   .sidebar { transform: translateX(-100%); }
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   LANDING (/landing) — dark, vibrant, liquid-glass cinematic hero.
+   Self-contained under .lz so it never touches the light app theme. ══════════ */
+.lz {
+  --o: #f97316;            /* Paradigm orange */
+  --o2: #ffb27a;
+  position: relative; min-height: 100vh; width: 100%; overflow: hidden;
+  background: #141110; color: #fff;
+  font-family: var(--font-sans);
+}
+.lz a { color: inherit; text-decoration: none; }
+
+/* alive aurora field */
+.lz-field { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.lz-blob { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.6; will-change: transform; }
+.lz-blob.b1 { width: 56vw; height: 56vw; left: -8vw; top: -16vw; background: radial-gradient(circle, rgba(249,115,22,0.7), transparent 66%); animation: lzDrift1 22s ease-in-out infinite; }
+.lz-blob.b2 { width: 48vw; height: 48vw; right: -10vw; top: -6vw; background: radial-gradient(circle, rgba(255,150,90,0.55), transparent 66%); animation: lzDrift2 26s ease-in-out infinite; }
+.lz-blob.b3 { width: 60vw; height: 60vw; right: 4vw; bottom: -26vw; background: radial-gradient(circle, rgba(217,90,40,0.5), transparent 66%); animation: lzDrift1 30s ease-in-out infinite reverse; }
+.lz-blob.b4 { width: 40vw; height: 40vw; left: 6vw; bottom: -18vw; background: radial-gradient(circle, rgba(120,90,200,0.28), transparent 66%); animation: lzDrift2 34s ease-in-out infinite; }
+.lz-cone { position: absolute; inset: -30% -10%; z-index: 0; opacity: 0.35; mix-blend-mode: screen;
+  background: conic-gradient(from 0deg at 60% 40%, transparent, rgba(249,115,22,0.25), transparent 30%, rgba(255,178,122,0.18), transparent 60%);
+  animation: lzSpin 48s linear infinite; }
+.lz-grain { position: absolute; inset: 0; z-index: 1; opacity: 0.05; pointer-events: none; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.lz-vign { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 30%, transparent 40%, rgba(10,8,7,0.55) 100%); }
+
+@keyframes lzDrift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(5vw,4vw) scale(1.12); } }
+@keyframes lzDrift2 { 0%,100% { transform: translate(0,0) scale(1.05); } 50% { transform: translate(-4vw,5vw) scale(0.95); } }
+@keyframes lzSpin { to { transform: rotate(360deg); } }
+
+/* progressive blur at the bottom (stacked backdrop layers) */
+.lz-blur { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; z-index: 2; pointer-events: none; }
+.lz-blur > i { position: absolute; inset: 0; }
+.lz-blur > i:nth-child(1) { backdrop-filter: blur(0.5px); mask-image: linear-gradient(to bottom, transparent 0%, #000 14%); }
+.lz-blur > i:nth-child(2) { backdrop-filter: blur(1px);   mask-image: linear-gradient(to bottom, transparent 14%, #000 28%); }
+.lz-blur > i:nth-child(3) { backdrop-filter: blur(2px);   mask-image: linear-gradient(to bottom, transparent 28%, #000 42%); }
+.lz-blur > i:nth-child(4) { backdrop-filter: blur(3px);   mask-image: linear-gradient(to bottom, transparent 42%, #000 56%); }
+.lz-blur > i:nth-child(5) { backdrop-filter: blur(5px);   mask-image: linear-gradient(to bottom, transparent 56%, #000 70%); }
+.lz-blur > i:nth-child(6) { backdrop-filter: blur(8px);   mask-image: linear-gradient(to bottom, transparent 70%, #000 100%); }
+.lz-blur::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to bottom, transparent, rgba(15,11,9,0.5) 55%, rgba(15,11,9,0.82)); }
+
+/* glass (dark) */
+.lz-glass {
+  background: linear-gradient(135deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03));
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 18px 50px -24px rgba(0,0,0,0.6);
+}
+
+.lz-main { position: relative; z-index: 5; min-height: 100vh; display: flex; flex-direction: column; padding: clamp(22px,3vw,40px); }
+
+/* header */
+.lz-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.lz-brand { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 18px; letter-spacing: -0.01em; }
+.lz-pill {
+  display: inline-flex; align-items: center; gap: clamp(14px,1.6vw,26px);
+  padding: 9px clamp(14px,1.3vw,20px); border-radius: 999px;
+  background: linear-gradient(12deg, rgba(255,255,255,0.08), rgba(255,255,255,0));
+  border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+}
+.lz-pill a { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.74); transition: color .18s ease; display: inline-flex; align-items: center; gap: 7px; }
+.lz-pill a:hover { color: #fff; }
+.lz-badge { width: 18px; height: 18px; border-radius: 50%; background: rgba(249,115,22,0.9); color: #1a0d05; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.lz a.lz-cta { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 11px; font-size: 14px; font-weight: 600;
+  background: #fff; color: #161110; transition: transform .14s ease, box-shadow .14s ease; box-shadow: 0 10px 30px -12px rgba(255,255,255,0.4); }
+.lz-cta:hover { transform: translateY(-1px); box-shadow: 0 16px 36px -12px rgba(255,255,255,0.5); }
+
+/* eyebrow + headline */
+.lz-eyebrow { display: inline-flex; align-items: center; gap: 9px; padding: 6px 13px; border-radius: 999px; align-self: flex-start;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.8); }
+.lz-eyebrow .dot { width: 7px; height: 7px; border-radius: 99px; background: var(--o); box-shadow: 0 0 10px var(--o); animation: lzPulse 2.4s ease-in-out infinite; }
+@keyframes lzPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+.lz-hero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 26px; max-width: 1000px; }
+.lz-h1 { font-size: clamp(40px,5.4vw,84px); line-height: 1.03; letter-spacing: -0.03em; font-weight: 600; margin: 0; }
+.lz-h1 .accent { font-family: var(--font-serif); font-style: italic; font-weight: 500; color: var(--o2); }
+.lz-h1 .accent .lz-char { text-shadow: 0 0 28px rgba(249,115,22,0.35); }
+.lz-line { display: block; overflow: hidden; }
+.lz-char { display: inline-block; transform: translateY(115%); opacity: 0; animation: lzChar 0.7s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes lzChar { to { transform: translateY(0); opacity: 1; } }
+
+.lz-up { opacity: 0; transform: translateY(16px); animation: lzUp 0.8s cubic-bezier(0.16,1,0.3,1) both; }
+@keyframes lzUp { to { opacity: 1; transform: translateY(0); } }
+
+/* bottom row */
+.lz-bottom { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 18px 40px; margin-top: auto; padding-top: 30px; }
+.lz-label { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.9); }
+.lz-desc { max-width: 460px; color: rgba(255,255,255,0.6); font-size: 15px; line-height: 1.5; margin: 10px 0 18px; }
+.lz-actions { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.lz a.lz-primary { display: inline-flex; align-items: center; gap: 9px; padding: 13px 22px; border-radius: 12px; font-size: 15px; font-weight: 600; color: #161110;
+  background: linear-gradient(180deg, #ffb27a, var(--o)); box-shadow: 0 16px 40px -14px rgba(249,115,22,0.65), inset 0 1px 0 rgba(255,255,255,0.5); transition: transform .14s ease; }
+.lz-primary:hover { transform: translateY(-1px); }
+.lz-scroll { display: inline-flex; align-items: center; gap: 9px; color: rgba(255,255,255,0.8); font-size: 14px; font-weight: 600; cursor: pointer; }
+.lz-scroll .ring { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); display: inline-flex; align-items: center; justify-content: center; overflow: hidden; }
+.lz-scroll .ring svg { animation: lzArrow 2.4s cubic-bezier(0.4,0,0.7,1) infinite; }
+@keyframes lzArrow { 0% { transform: translateY(0); opacity: 1; } 38% { transform: translateY(9px); opacity: 0; } 39% { transform: translateY(-9px); opacity: 0; } 60%,100% { transform: translateY(0); opacity: 1; } }
+
+.lz-card { display: flex; width: clamp(300px,27vw,380px); border-radius: 16px; overflow: hidden; transition: transform .25s ease, box-shadow .25s ease; }
+.lz-card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 26px 60px -28px rgba(0,0,0,0.7); }
+.lz-card-img { width: 132px; flex: 0 0 auto; background-size: cover; background-position: center; }
+.lz-card-body { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.lz-card-title { font-size: 14px; font-weight: 700; color: #fff; }
+.lz-card-text { font-size: 12.5px; color: rgba(255,255,255,0.6); line-height: 1.45; }
+.lz-card-arrow { margin-top: auto; color: rgba(255,255,255,0.5); transition: color .2s ease; }
+.lz-card:hover .lz-card-arrow { color: var(--o2); }
+
+/* side section nav */
+.lz-side { position: absolute; right: clamp(22px,3vw,40px); top: 50%; transform: translateY(-50%); z-index: 6;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
+.lz-side a { display: inline-flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.55); transition: color .2s ease; }
+.lz-side a:hover, .lz-side a.on { color: #fff; }
+.lz-side .bar { width: 0; height: 1px; background: #fff; transition: width .25s ease; }
+.lz-side a.on .bar, .lz-side a:hover .bar { width: 16px; }
+
+@media (max-width: 1024px) { .lz-side { display: none; } .lz-bottom { grid-template-columns: 1fr; } .lz-card { display: none; } }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
