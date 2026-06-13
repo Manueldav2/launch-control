@@ -78,6 +78,16 @@ export default function Home() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Judge-shareable deep link: /?demo=1 (or #sample) drops straight into a
+  // finished, all-GO week — no API key needed to see the full payoff.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("demo") === "1" || window.location.hash === "#sample") {
+      setPlan(SAMPLE_PLAN); setScorecard(SAMPLE_SCORE);
+    }
+  }, []);
+
   async function makeMedia(di: number, si: number) {
     if (!plan) return;
     const slot = plan.days[di].slots[si];
@@ -240,6 +250,9 @@ export default function Home() {
               ))}
             </div>
           </section>
+
+          {/* what the crew ships — a live drift of real sample output */}
+          <ShipMarquee onPeek={loadSample} />
         </>
       )}
 
@@ -459,6 +472,58 @@ function SlotCard({ slot, busy, onRender, isVid }:
         )}
       </div>
     </div>
+  );
+}
+
+// ─── "what the crew ships" — an edge-masked marquee of the REAL sample posts ───
+// Pulls straight from SAMPLE_PLAN so judges see actual graded output, not lorem.
+function ShipMarquee({ onPeek }: { onPeek: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const posts = useMemo(
+    () => SAMPLE_PLAN.days.flatMap((d) => d.slots.map((s) => ({ ...s, weekday: d.weekday }))),
+    [],
+  );
+  if (!mounted) return null;
+  // Duplicate the list so the -50% translate loops seamlessly.
+  const loop = [...posts, ...posts];
+  return (
+    <section className="rise" style={{ margin: "64px auto 0", animationDelay: "320ms" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 20 }}>
+        <span style={{ height: 1, width: 40, background: "var(--line-bright)" }} />
+        <span className="eyebrow">What the crew ships · all graded GO</span>
+        <span style={{ height: 1, width: 40, background: "var(--line-bright)" }} />
+      </div>
+      <div className="marquee-mask" style={{ overflow: "hidden", padding: "6px 0" }}>
+        <div className="marquee-track" style={{ display: "flex", gap: 14, width: "max-content" }}>
+          {loop.map((p, i) => (
+            <button key={i} onClick={onPeek} title="See the full week"
+              style={{
+                flex: "0 0 auto", width: 248, textAlign: "left", cursor: "pointer",
+                background: "linear-gradient(180deg, var(--panel), var(--void-2))",
+                border: "1px solid var(--line)", borderRadius: 13, padding: "13px 14px",
+                transition: "border-color 0.18s ease, transform 0.18s ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(255,106,26,0.4)"; e.currentTarget.style.transform = "translateY(-3px)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--line)"; e.currentTarget.style.transform = "translateY(0)"; }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
+                  <PlatformGlyph p={p.platform} />
+                  <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.1em" }}>{PLATFORM_LABEL[p.platform]}</span>
+                </span>
+                <span className="mono" style={{ fontSize: 7.5, letterSpacing: "0.1em", color: "var(--faint)", border: "1px solid var(--line-bright)", borderRadius: 4, padding: "1px 6px" }}>{TYPE_LABEL[p.contentType]}</span>
+              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--fg)", opacity: 0.92, minHeight: 72, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.copy}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10 }}>
+                <span style={{ width: 5, height: 5, borderRadius: 99, background: "var(--go)", boxShadow: "0 0 6px var(--go)" }} />
+                <span className="mono" style={{ fontSize: 8, letterSpacing: "0.12em", color: "var(--go)" }}>GO</span>
+                <span className="mono" style={{ fontSize: 8, letterSpacing: "0.08em", color: "var(--faint)", marginLeft: "auto" }}>{p.weekday.toUpperCase()}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
