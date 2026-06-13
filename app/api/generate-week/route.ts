@@ -2,14 +2,15 @@
 // pass that grades every slot and regenerates any that fail. Returns a plan
 // where every piece of copy has a green grade.
 import { NextRequest, NextResponse } from "next/server";
-import { generateWeekPlan, gradeSlot, fixSlotCopy } from "@/lib/anthropic";
+import { generateWeekPlan } from "@/lib/anthropic";
+import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
 import type { WeekInputs } from "@/lib/types";
 
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as Partial<WeekInputs>;
+    const body = (await req.json()) as Partial<WeekInputs> & { deepReview?: boolean };
     if (!body.goal || !body.cta || !body.website)
       return NextResponse.json({ error: "goal, cta, and website are required" }, { status: 400 });
 
@@ -20,21 +21,27 @@ export async function POST(req: NextRequest) {
 
     const plan = await generateWeekPlan(inputs);
 
-    // Critic loop: grade every slot, rewrite the failures once, re-grade.
+    // Critic loop: grade every slot (deterministic + LLM checks), rewrite the
+    // failures once, re-grade. `deep=true` adds the LLM fabrication/CTA pass.
+    const deep = body.deepReview !== false;
     let fixed = 0;
     for (const day of plan.days) {
       for (const slot of day.slots) {
-        let grade = gradeSlot(slot);
-        if (!grade.pass) {
+        const det = gradeSlot(slot);
+        const llm = deep ? await gradeSlotLLM(slot, day.cta) : [];
+        let failures = [...det.failures, ...llm];
+        if (failures.length) {
           try {
-            slot.copy = await fixSlotCopy(slot, grade.failures);
-            grade = gradeSlot(slot);
+            slot.copy = await fixSlotCopy(slot, failures);
+            const det2 = gradeSlot(slot);
+            const llm2 = deep ? await gradeSlotLLM(slot, day.cta) : [];
+            failures = [...det2.failures, ...llm2];
             fixed++;
           } catch {
             /* keep original + its failing grade */
           }
         }
-        slot.grade = grade;
+        slot.grade = { pass: failures.length === 0, failures };
       }
     }
 
