@@ -6,6 +6,8 @@
 // whole week across X / LinkedIn / Instagram / TikTok through Zernio.
 
 import { useEffect, useState } from "react";
+import { authHeader } from "@/lib/client-auth";
+import { falHeader } from "@/lib/client-fal";
 
 type Slot = { platform: string; contentType: string; copy: string; mediaPrompt?: string; mediaUrl?: string; reaction?: string };
 type Day = { day: number; weekday: string; slots: Slot[] };
@@ -54,7 +56,7 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
       const { di, si, s, day } = unrendered[i];
       try {
         const r = await fetch("/api/generate-media", {
-          method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}) },
+          method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}), ...(await authHeader()), ...falHeader() },
           body: JSON.stringify({
             contentType: s.contentType, prompt: s.mediaPrompt || s.copy, intent: s.reaction,
             brandColors: plan.brand?.colors, location: plan.inputs?.location,
@@ -63,6 +65,8 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
           }),
         });
         const d = await r.json();
+        // Free-tier limit hit: stop rendering, offer the own-key path (text/plan stay free).
+        if (r.status === 402) { setErr(d.error || "Free media limit reached."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); setRendering(null); return; }
         if (d.url) { next.days[di].slots[si].mediaUrl = d.url; onPlanChange(structuredClone(next)); }
       } catch { /* one render failing shouldn't stop the run */ }
       setRendering({ done: i + 1, total });
@@ -136,6 +140,10 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
         {unrendered.length > 0 && (
           <span style={{ fontSize: 11.5, color: "var(--faint)" }}>Render media first so Instagram + TikTok get the video.</span>
         )}
+        <button onClick={() => { if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); }}
+          style={{ background: "transparent", border: 0, color: "var(--clay-deep)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+          Use your own fal.ai key
+        </button>
       </div>
 
       {err && <p style={{ color: "var(--abort)", fontSize: 12.5, margin: "12px 0 0" }}>{err}</p>}

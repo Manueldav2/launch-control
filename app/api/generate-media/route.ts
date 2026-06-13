@@ -10,6 +10,7 @@ import { spentSoFar } from "@/lib/fal";
 import { critiqueVisual } from "@/lib/visual-critic";
 import { enqueueAsset } from "@/lib/media-pipeline";
 import { userIdFromRequest } from "@/lib/auth-server";
+import { runWithKeys } from "@/lib/request-keys";
 import { db } from "@/lib/store";
 
 export const maxDuration = 300;
@@ -31,36 +32,46 @@ export async function POST(req: NextRequest) {
     const apiKey = req.headers.get("x-anthropic-key") || body.apiKey || undefined;
     if (!prompt) return NextResponse.json({ error: "prompt required" }, { status: 400 });
 
+    // Bring-your-own fal.ai key: when present, the render runs on the user's key
+    // and the free-tier quota does not apply (they pay for their own renders).
+    const userFalKey = (req.headers.get("x-fal-key") || body.falKey || "").trim();
+    const usingOwnKey = !!userFalKey;
+
     const isVideo = contentType === "ugc_video" || contentType === "motion_video";
 
-    // Free-tier quota: read this account's usage and stop at the free limit.
+    // Free-tier quota: read this account's usage and stop at the free limit —
+    // unless they brought their own key.
     const c = db();
     let used = { images: 0, videos: 0 };
     if (c) {
       const { data } = await c.from("usage").select("images,videos").eq("user_id", userId).maybeSingle();
       if (data) used = data as { images: number; videos: number };
     }
-    if (isVideo && used.videos >= FREE_VIDEOS)
-      return NextResponse.json({ error: `Your free plan includes ${FREE_VIDEOS} video render, and it's used. Plain text and planning stay free.`, quota: { kind: "video", used: used.videos, limit: FREE_VIDEOS } }, { status: 402 });
-    if (!isVideo && used.images >= FREE_IMAGES)
-      return NextResponse.json({ error: `Your free plan includes ${FREE_IMAGES} image render, and it's used. Plain text and planning stay free.`, quota: { kind: "image", used: used.images, limit: FREE_IMAGES } }, { status: 402 });
+    if (!usingOwnKey) {
+      if (isVideo && used.videos >= FREE_VIDEOS)
+        return NextResponse.json({ error: `Your free plan includes ${FREE_VIDEOS} video render, and it's used. Add your own fal.ai key to keep rendering. Plain text and planning stay free.`, quota: { kind: "video", used: used.videos, limit: FREE_VIDEOS, canUseOwnKey: true } }, { status: 402 });
+      if (!isVideo && used.images >= FREE_IMAGES)
+        return NextResponse.json({ error: `Your free plan includes ${FREE_IMAGES} image render, and it's used. Add your own fal.ai key to keep rendering. Plain text and planning stay free.`, quota: { kind: "image", used: used.images, limit: FREE_IMAGES, canUseOwnKey: true } }, { status: 402 });
+    }
 
     const colors: string[] = Array.isArray(brandColors) ? brandColors.slice(0, 3) : [];
 
     // ONE render path (lib/media-gen): branded prompt + fal. Identical for the
-    // first cut and every regeneration, so nothing drifts on regen.
+    // first cut and every regeneration, so nothing drifts on regen. If the user
+    // brought a key, run the render inside its key context (lib/request-keys).
     let url = "";
     let stillUrl = "";
+    const doRender = () => renderMedia({ contentType, prompt, intent, brandColors: colors, location, imageUrl });
     try {
-      ({ url, stillUrl } = await renderMedia({ contentType, prompt, intent, brandColors: colors, location, imageUrl }));
+      ({ url, stillUrl } = usingOwnKey ? await runWithKeys({ FAL_KEY: userFalKey }, doRender) : await doRender());
     } catch (e: any) {
       const msg = String(e?.message || e);
       const status = msg.startsWith("no media for") ? 400 : 500;
-      return NextResponse.json({ error: msg, spentUsd: spentSoFar() }, { status });
+      return NextResponse.json({ error: usingOwnKey ? `Render failed on your fal.ai key: ${msg}` : msg, spentUsd: spentSoFar() }, { status });
     }
 
-    // Render succeeded — count it against the free quota.
-    if (c) {
+    // Count free-tier renders only (own-key renders are on the user's account).
+    if (!usingOwnKey && c) {
       await c.from("usage").upsert(
         { user_id: userId, images: used.images + (isVideo ? 0 : 1), videos: used.videos + (isVideo ? 1 : 0), updated_at: new Date().toISOString() },
         { onConflict: "user_id" },
