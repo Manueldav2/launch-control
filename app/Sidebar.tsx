@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Ic, Mark, PlatformGlyph } from "./icons";
 
 const RECENT = [
@@ -17,12 +18,28 @@ export default function Sidebar() {
   const path = usePathname();
   const router = useRouter();
   const [mini, setMini] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [reduce, setReduce] = useState(false);
 
-  useEffect(() => { setMini(localStorage.getItem("lc:mini") === "1"); }, []);
+  useEffect(() => {
+    setMini(localStorage.getItem("lc:mini") === "1");
+    setReduce(localStorage.getItem("lc:reduce") === "1");
+  }, []);
   useEffect(() => {
     document.documentElement.style.setProperty("--side-w", mini ? "72px" : "264px");
     localStorage.setItem("lc:mini", mini ? "1" : "0");
   }, [mini]);
+  useEffect(() => {
+    document.documentElement.classList.toggle("no-motion", reduce);
+    localStorage.setItem("lc:reduce", reduce ? "1" : "0");
+  }, [reduce]);
+
+  async function clearData() {
+    try { const { clearAssets } = await import("@/lib/assets-store"); clearAssets(); } catch {}
+    try { sessionStorage.removeItem("lc:mission"); } catch {}
+    setSettings(false);
+    if (path !== "/") router.push("/"); else window.dispatchEvent(new Event("lc:new"));
+  }
 
   function loadMission(m: typeof RECENT[number]) {
     sessionStorage.setItem("lc:mission", JSON.stringify({ goal: m.goal, cta: m.cta, website: m.website }));
@@ -66,10 +83,15 @@ export default function Sidebar() {
           </RailBtn>
           <RailBtn onClick={() => router.push("/")} active={path === "/"} title="Console"><Ic name="console" /></RailBtn>
           <RailBtn onClick={() => router.push("/assets")} active={onAssets} title="Asset Bay"><Ic name="layers" /></RailBtn>
+          <RailBtn onClick={() => router.push("/calendar")} active={path.startsWith("/calendar")} title="Calendar"><Ic name="calendar" /></RailBtn>
+          <RailBtn onClick={() => router.push("/channels")} active={path.startsWith("/channels")} title="Channels"><Ic name="broadcast" /></RailBtn>
+          <RailBtn onClick={() => router.push("/landing")} title="Landing page"><span style={{ color: "var(--clay-deep)", display: "flex" }}><Ic name="bolt" /></span></RailBtn>
         </div>
-        <div style={{ marginTop: "auto", padding: "12px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <div style={{ marginTop: "auto", padding: "12px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+          <RailBtn onClick={() => setSettings(true)} title="Settings"><Ic name="gear" size={17} /></RailBtn>
           <span title="Myles David" style={{ width: 30, height: 30, borderRadius: 99, background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)" }}>MD</span>
         </div>
+        {settings && <SettingsModal onClose={() => setSettings(false)} mini={mini} setMini={setMini} reduce={reduce} setReduce={setReduce} onClear={clearData} />}
       </aside>
     );
   }
@@ -107,6 +129,12 @@ export default function Sidebar() {
         </Link>
         <Link href="/channels" className="nav-item" data-active={path === "/channels"}>
           <span className="nav-ico"><Ic name="broadcast" /></span> Channels
+        </Link>
+        <Link href="/landing" className="nav-item" style={{ color: "var(--clay-deep)" }} title="View the landing page">
+          <span className="nav-ico"><Ic name="bolt" /></span>
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flex: 1 }}>
+            Landing page <Ic name="arrowRight" size={14} />
+          </span>
         </Link>
       </nav>
 
@@ -170,8 +198,80 @@ export default function Sidebar() {
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>Myles David</div>
           <div style={{ fontSize: 11.5, color: "var(--faint)" }}>Built with Claude · Opus 4.8</div>
         </div>
-        <Ic name="gear" size={16} />
+        <button onClick={() => setSettings(true)} aria-label="Settings" title="Settings"
+          style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer", padding: 6, borderRadius: 8, display: "flex" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.05)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+          <Ic name="gear" size={16} />
+        </button>
       </div>
+      {settings && <SettingsModal onClose={() => setSettings(false)} mini={mini} setMini={setMini} reduce={reduce} setReduce={setReduce} onClear={clearData} />}
     </aside>
   );
+}
+
+function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} role="switch" aria-checked={on} style={{
+      width: 42, height: 24, borderRadius: 99, border: 0, cursor: "pointer", padding: 0, position: "relative", flex: "0 0 auto",
+      background: on ? "var(--clay)" : "var(--border-strong)", transition: "background .16s ease",
+    }}>
+      <span style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 18, height: 18, borderRadius: 99, background: "#fff", transition: "left .16s ease", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+    </button>
+  );
+}
+
+function SettingsModal({ onClose, mini, setMini, reduce, setReduce, onClear }:
+  { onClose: () => void; mini: boolean; setMini: (v: boolean) => void; reduce: boolean; setReduce: (v: boolean) => void; onClear: () => void }) {
+  const Row = ({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 0", borderTop: "1px solid var(--border)" }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)" }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{desc}</div>
+      </div>
+      {children}
+    </div>
+  );
+  if (typeof document === "undefined") return null;
+  return createPortal((
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, zIndex: 60, background: "rgba(31,30,27,0.34)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 24, animation: "fadein .2s ease both",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="lg lg-strong" style={{ width: "min(440px, 94vw)", borderRadius: 20, padding: "22px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <h2 className="serif" style={{ fontSize: 24, fontWeight: 400, color: "var(--ink)", margin: 0 }}>Settings</h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: "transparent", border: 0, color: "var(--muted)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <p style={{ fontSize: 12.5, color: "var(--faint)", margin: "0 0 6px" }}>Workspace preferences. Saved on this device.</p>
+
+        <Row title="Reduce motion" desc="Turn off animations and the liquid-glass shimmer.">
+          <Toggle on={reduce} onClick={() => setReduce(!reduce)} />
+        </Row>
+        <Row title="Start collapsed" desc="Open the sidebar as a compact icon rail.">
+          <Toggle on={mini} onClick={() => setMini(!mini)} />
+        </Row>
+
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/landing" onClick={onClose} className="glass-btn" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: "var(--clay-deep)" }}>
+            <Ic name="bolt" size={15} /> View landing page
+          </Link>
+          <Link href="/assets" onClick={onClose} className="glass-btn" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 14px", borderRadius: 10, fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+            <Ic name="layers" size={15} /> Asset Bay
+          </Link>
+          <button onClick={onClear} style={{ marginLeft: "auto", background: "transparent", border: "1px solid var(--border-strong)", color: "var(--abort)", borderRadius: 10, padding: "9px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+            Clear saved data
+          </button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 11, marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+          <span style={{ width: 32, height: 32, borderRadius: 99, background: "linear-gradient(180deg, #e8906f, var(--clay))", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>MD</span>
+          <div style={{ lineHeight: 1.3 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>Myles David</div>
+            <div style={{ fontSize: 12, color: "var(--faint)" }}>Paradigm Outreach · Built with Claude Opus 4.8</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  ), document.body);
 }
