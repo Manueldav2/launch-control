@@ -35,8 +35,19 @@ export async function POST(req: NextRequest) {
     const geo = await geocodePlace(location);
     const timezone = geo?.timezone || "America/New_York";
     const eventDate = nextDateFor(eventWeekday);
-    const startAt = `${eventDate}T10:00:00`;   // naive local; Luma applies `timezone`
-    const endAt = `${eventDate}T12:00:00`;
+    // Luma requires a full ISO datetime WITH a timezone offset (a naive local time
+    // is rejected as "Invalid ISO datetime"). Compute the offset for the event's
+    // timezone on that date (handles DST).
+    const offsetFor = (d: string) => {
+      try {
+        const name = new Intl.DateTimeFormat("en-US", { timeZone: timezone, timeZoneName: "shortOffset" })
+          .formatToParts(new Date(`${d}T12:00:00Z`)).find((p) => p.type === "timeZoneName")?.value || "GMT+0";
+        const m = name.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/);
+        return m ? `${m[1]}${m[2].padStart(2, "0")}:${m[3] || "00"}` : "+00:00";
+      } catch { return "+00:00"; }
+    };
+    const startAt = `${eventDate}T10:00:00${offsetFor(eventDate)}`;
+    const endAt = `${eventDate}T12:00:00${offsetFor(eventDate)}`;
 
     // Name + description, grounded in the real brand + goal + place. No AI-tells.
     let name = `${brand.name || "Community"} event`;
