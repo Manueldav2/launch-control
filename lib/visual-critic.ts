@@ -11,6 +11,14 @@
 // docs/rubric.md ("Visual Rubric") and lib/visual-critic.test.ts.
 import { askVision, extractJson } from "./llm";
 import { generateImage } from "./fal";
+import {
+  parseCompetitiveVerdict,
+  skippedCompetitive,
+  engagementOf,
+  engagementLabel,
+  type CompetitiveVerdict,
+} from "./critic";
+import type { CompetitorPost } from "./bright-data";
 
 export type VisualVerdict = {
   pass: boolean;
@@ -278,4 +286,138 @@ export async function fixRender(opts: {
     attempts: history.length,
     history,
   };
+}
+
+// ── COMPETITIVE VISUAL COMPARISON (the Bright Data half) ─────────────────────
+// The visual rubric above grades a render on its own merits (matches intent,
+// clean, on-brand). This layer grades it against the REAL competition: the
+// high-engagement peer posts Bright Data scraped (their captions + engagement,
+// and their lead image when one is exposed). It asks the vision model — looking
+// at OUR render — whether ours would win the scroll next to what's working in
+// this space, and returns concrete visual changes when it wouldn't. The verdict
+// shape + parser are shared with the text critic (lib/critic.ts) so both critics
+// speak one CompetitiveVerdict language; the route folds the suggestions into a
+// competitive re-render via `competitiveRenderPrompt` (below).
+//
+// Opt-in + graceful, same discipline as the rest of this file: no same-platform
+// peers, an unrenderable image, or any error → a skipped verdict (comparedTo===0,
+// competitive: true) so nothing changes when there's no competitor signal.
+
+// PURE, offline — build the visual competitive-comparison prompt. The corpus is
+// the same-platform peer posts ranked by engagement (captions + counts), which
+// describes what's resonating. `refCount` is how many real competitor IMAGES were
+// attached after ours: when > 0 the model compares ours directly against theirs
+// (true image-to-image); when 0 it judges ours against the caption/engagement
+// signal alone. Exported so the prompt shape is unit-tested with no API key.
+export function buildVisualComparePrompt(
+  intent: string,
+  peers: CompetitorPost[],
+  brandColors?: string[],
+  refCount = 0,
+): { system: string; user: string } {
+  const colors = (brandColors || []).slice(0, 4).join(", ");
+  const corpus = [...peers]
+    .sort((a, b) => engagementOf(b) - engagementOf(a))
+    .slice(0, 6)
+    .map((p) => `[${engagementLabel(p)}] ${p.text.replace(/\s+/g, " ").slice(0, 200)}`)
+    .join("\n");
+  // When competitor images are attached, name which image is ours so the model
+  // compares the actual visuals; otherwise it works from the caption signal.
+  const lineup = refCount > 0
+    ? `The FIRST attached image is OUR render. The next ${refCount} image(s) are real top competitor posts in this space — compare ours directly against them.\n`
+    : "";
+  return {
+    system:
+      "You are a competitive art director. You compare OUR rendered social image against " +
+      "what actually wins in this space and say how to make ours stop the scroll better. " +
+      "Judge ONLY what you SEE in the attached image(s). Never invent facts. Reply with ONLY JSON.",
+    user:
+      `Our image is meant to: ${intent}\n` +
+      (colors ? `Our brand palette: ${colors} (stay on-brand).\n` : "") +
+      lineup +
+      "What wins in this space right now — real top peer posts (engagement = likes+comments+shares, " +
+      "shown where the source exposes it):\n" +
+      `${corpus}\n\n` +
+      "Return ONLY JSON:\n" +
+      '{"competitive": true/false, "suggestions": ["concrete visual change", "..."], "notes": "one line"}\n' +
+      "competitive = false if these peers would clearly out-perform OUR image at stopping the scroll. " +
+      "suggestions = at most 4 concrete, specific visual changes (composition, subject, energy, focal point, " +
+      "text treatment) that would make OUR image beat them while staying on-brand and clean — never copy a " +
+      "competitor, never add fake text or logos.",
+  };
+}
+
+// Compare one rendered still to the real competitor posts for its platform. When
+// those posts carry images, they're shown to the model alongside ours for a true
+// image-to-image comparison (it degrades to the caption/engagement signal when no
+// competitor image is available). Returns a skipped verdict (no re-render) when
+// there are no same-platform peers, the render is unfetchable, or on any error.
+export async function compareVisualToCompetitors(opts: {
+  imageUrl: string;
+  intent: string;
+  platform?: string; // when set, only peers on this platform are compared against
+  peers: CompetitorPost[];
+  brandColors?: string[];
+  apiKey?: string;
+  // Injectable purely for offline tests of the skip/error control flow (mirrors
+  // fixRender's generate/critique seam); production callers never pass it.
+  askVisionImpl?: (o: { imageUrl: string; refImages?: string[]; system?: string; user: string; maxTokens?: number; apiKey?: string }) => Promise<string>;
+}): Promise<CompetitiveVerdict> {
+  const same = (opts.peers || []).filter(
+    (p) => (!opts.platform || p.platform === opts.platform) && p.text?.trim(),
+  );
+  if (!same.length) return skippedCompetitive();
+  if (!gradeRender(opts.imageUrl).ok) return skippedCompetitive();
+  // The actual competitor visuals (top by engagement) to show next to ours.
+  const refImages = [...same]
+    .sort((a, b) => engagementOf(b) - engagementOf(a))
+    .map((p) => p.imageUrl)
+    .filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))
+    .slice(0, 3);
+  const askVisionFn = opts.askVisionImpl || askVision;
+  try {
+    const { system, user } = buildVisualComparePrompt(opts.intent, same, opts.brandColors, refImages.length);
+    const out = await askVisionFn({ imageUrl: opts.imageUrl, refImages, apiKey: opts.apiKey, maxTokens: 320, system, user });
+    return parseCompetitiveVerdict(out, same.length);
+  } catch {
+    return skippedCompetitive();
+  }
+}
+
+// `critiqueVisual` FAILS OPEN on an infrastructure error: it returns a synthetic
+// pass whose notes begin "review skipped: …" so a network/API hiccup never blocks
+// the generation pipeline. A caller that must NOT ship on a non-verdict — like the
+// competitive re-render acceptance — uses this to tell a REAL pass from a skip, so
+// a transient vision error can't swap in an un-art-directed render. (reviewer.ts
+// keys off the same sentinel to fall back to its heuristic backend.)
+export function wasReviewSkipped(v: VisualVerdict): boolean {
+  return /^review skipped/i.test(v.notes || "");
+}
+
+// PURE, offline — the competitive analog of `improveRenderPrompt`, for a render
+// that ALREADY passed the visual rubric. Where `improveRenderPrompt` corrects a
+// FAILED render (and is framed that way), this strengthens a passing one to
+// out-perform competitor visuals — without the misleading "previous render failed"
+// framing. Keeps the original subject, folds in the competitive suggestions (+ the
+// palette when the render was off-brand), and is GUARANTEED distinct per `attempt`
+// so `generateImage`'s prompt-keyed cache (lib/fal.ts) can't hand back the same
+// render. Kept pure so it's unit-tested with NO API key, like the builders above.
+export function competitiveRenderPrompt(
+  basePrompt: string,
+  attempt: number,
+  suggestions: string[],
+  brandColors?: string[],
+  offBrand = false,
+): string {
+  const moves = (suggestions || []).filter((s) => typeof s === "string" && s.trim().length > 0).slice(0, 4);
+  const colors = (brandColors || []).slice(0, 4).join(", ");
+  const palette = offBrand && colors ? ` Keep it on-brand: weave the palette (${colors}) in naturally.` : "";
+  const direction = moves.length
+    ? moves.join("; ")
+    : "sharpen the composition and focal point so it stops the scroll";
+  return (
+    `${basePrompt.trim()}\n\n` +
+    `Revision ${attempt} — this render already passed art-direction review; now make it OUT-PERFORM ` +
+    `competitor visuals in this space (never copy them, never add fake text or logos): ${direction}.${palette}`
+  );
 }

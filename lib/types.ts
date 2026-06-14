@@ -1,5 +1,7 @@
 // The contract for the whole engine. The week plan is the core artifact.
 import type { VisualVerdict } from "./visual-critic";
+import type { CompetitiveVerdict } from "./critic";
+import type { CompetitorPost } from "./bright-data";
 
 export type Platform = "x" | "linkedin" | "instagram";
 export const PLATFORMS: Platform[] = ["x", "linkedin", "instagram"];
@@ -22,6 +24,12 @@ export interface ContentSlot {
   grade?: SlotGrade;
   // Visual critic verdict for the rendered media (set by the optional visual pass).
   visualGrade?: VisualVerdict;
+  // Competitive critic verdict for the COPY — how it stacks up against real peer
+  // posts (Bright Data). Set only when competitor posts were mined; comparedTo===0
+  // means the comparison was skipped (no competitor signal).
+  competitive?: CompetitiveVerdict;
+  // Competitive critic verdict for the rendered MEDIA, same shape/semantics.
+  visualCompetitive?: CompetitiveVerdict;
 }
 
 export interface SlotGrade {
@@ -52,6 +60,10 @@ export interface WeekInputs {
   // the CTA + hook patterns that actually win. Requires BRIGHT_DATA_API_KEY;
   // ignored (and the engine behaves exactly as before) when unset.
   competitors?: string[];
+  // When no `competitors` are supplied, automatically RESEARCH and find them
+  // (lib/research.ts discoverCompetitors). Defaults to ON; set false to opt out.
+  // No-op without BRIGHT_DATA_API_KEY.
+  autoCompetitors?: boolean;
   // The in-person event location ("Ocean Beach, San Francisco"). Empty or "NA"
   // means there is no physical place — the CTA points to the website instead.
   location?: string;
@@ -105,6 +117,14 @@ export interface WeekPlan {
   brand: BrandContext;
   playbook?: string; // the researched "what wins" intel that shaped the plan
   competitorIntel?: string; // real peer CTA/hook patterns mined via Bright Data (optional)
+  // The competitor profile URLs the critics benchmarked against — whether
+  // hand-entered or AUTO-DISCOVERED (lib/research.ts). Surfaced so the UI can show
+  // who was found. Empty/absent unless Bright Data is configured.
+  competitors?: string[];
+  // The raw top peer posts (per platform) the critics compared our content
+  // against — the benchmark behind every slot's `competitive` verdict. Empty/
+  // absent unless Bright Data is configured AND competitors were supplied/found.
+  competitorPosts?: CompetitorPost[];
   days: DayPlan[];
   weather?: WeatherWatch | null; // set for go-to-place events
   luma?: LumaEvent | null;       // set once a Luma event is created

@@ -90,3 +90,54 @@ FAIL, so a broken review can never silently ship a bad image. Only an
 *infrastructure* failure (network / API / unparseable reply) is non-blocking —
 `critiqueVisual` surfaces that as a skipped review so the pipeline never hangs on
 the critic.
+
+# Competitive Rubric — grading our content against the real competition
+
+The two rubrics above grade each post against fixed internal standards. This
+third layer grades it against the **actual competition**: the high-engagement
+peer posts Bright Data scrapes for this space. Competitors are **auto-discovered**
+by Opus when none are hand-entered (`discoverCompetitors` → `resolveCompetitorPosts`
+in `lib/research.ts`), then scraped (`collectCompetitorPosts`, which routes each
+URL to its own platform dataset via `groupByPlatform`). Both critics consume the
+same raw posts that ride along on the `WeekPlan` (`competitorPosts`), and the
+resolved/auto-found competitor list rides along too (`competitors`).
+
+| Critic | Function | What it compares | What it returns |
+|--------|----------|------------------|-----------------|
+| Copy | `compareCopyToCompetitors` (`lib/critic.ts`) | our draft vs the top same-platform peer posts (text + engagement) | a `CompetitiveVerdict` — `{competitive, suggestions, notes, comparedTo}` |
+| Visual | `compareVisualToCompetitors` (`lib/visual-critic.ts`) | our rendered still (vision) vs what wins visually in the same space | the same `CompetitiveVerdict` shape |
+
+`competitive = false` means a peer would clearly out-perform ours; `suggestions`
+are at most four concrete, grounded edits (never "copy that post"). The verdict
+shape and its parser (`parseCompetitiveVerdict`) are **shared** by both critics so
+they speak one language; the parse is pure and unit-tested with no API key
+(`lib/critic.test.ts`, `lib/visual-critic.test.ts`), exactly like the parsers above.
+
+**How the suggestions act on the content.** In `app/api/generate-week`, the
+competitive pass runs *after* a slot is already rubric-clean. If it isn't
+competitive, the critic's suggestions feed ONE improvement pass —
+`fixSlotCopy` (steered by the suggestions) for copy, a competitive re-render via
+`improveRenderPrompt` for media — and the result is **kept only if it still passes
+the original rubric** (copy: `gradeSlot` + the LLM checks; media:
+`critiqueVisual`). A competitive tweak can therefore never regress the all-green
+guarantee; at worst it's a no-op.
+
+**Opt-in + graceful, like the rest.** With no `BRIGHT_DATA_API_KEY`, no
+`competitors` supplied, or a scrape that returns nothing, every comparison is a
+no-op returning a *skipped* verdict (`comparedTo === 0`, `competitive: true`), so
+the engine behaves precisely as it did before this layer existed. The scorecard
+reports `competitorPosts` / `copyImproved` / `mediaImproved` only when a real
+comparison ran.
+
+**Corpus balance + per-platform dataset capability.** Two practical safeguards:
+- `capPerAccount` (`lib/bright-data.ts`) keeps at most N posts (default 3) from any
+  one competitor before the top-per-platform slice, so a single viral account can't
+  dominate the benchmark — the critics compare against several rivals, not the loudest.
+- Each platform's Bright Data dataset accepts a different input shape (verified
+  live): **Instagram** is a profile dataset (a profile URL returns its posts — fast,
+  works out of the box); the default **X** dataset is a *posts* dataset that rejects
+  bare profile URLs (set `BRIGHT_DATA_X_MODE=discover` for a profile→posts crawl —
+  correct but slow); the default **LinkedIn** dataset is a *people* dataset that
+  rejects `/company/` pages (give it `/in/` URLs or a company dataset). Mode,
+  dataset id, and the poll ceiling are all env-configurable (see `.env.example`),
+  and a platform that yields nothing simply contributes nothing — never an error.

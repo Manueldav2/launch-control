@@ -11,7 +11,7 @@
     "review": "tsx scripts/review-worker.ts",
     "review:once": "tsx scripts/review-worker.ts --once",
     "review:e2e": "tsx scripts/e2e-producer.ts",
-    "test": "tsx --test lib/critic.test.ts lib/rubric.test.ts lib/visual-critic.test.ts lib/bright-data.test.ts lib/review/review.test.ts"
+    "test": "tsx --test lib/critic.test.ts lib/rubric.test.ts lib/visual-critic.test.ts lib/bright-data.test.ts lib/research.test.ts lib/review/review.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

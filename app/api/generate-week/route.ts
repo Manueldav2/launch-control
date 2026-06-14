@@ -3,8 +3,8 @@
 // where every piece of copy has a green grade.
 import { NextRequest, NextResponse } from "next/server";
 import { generateWeekPlan } from "@/lib/anthropic";
-import { gradeSlot, gradeSlotLLM, fixSlotCopy } from "@/lib/critic";
-import { fixRender } from "@/lib/visual-critic";
+import { gradeSlot, gradeSlotLLM, fixSlotCopy, compareCopyToCompetitors } from "@/lib/critic";
+import { fixRender, critiqueVisual, competitiveRenderPrompt, compareVisualToCompetitors, wasReviewSkipped } from "@/lib/visual-critic";
 import { generateImage } from "@/lib/fal";
 import { userIdFromRequest } from "@/lib/auth-server";
 import type { WeekInputs, ContentType } from "@/lib/types";
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       goal: body.goal, cta: body.cta, website: body.website,
       eventWeekday: body.eventWeekday || "Saturday",
       competitors: body.competitors, // optional peer URLs to mine (no-op without Bright Data)
+      autoCompetitors: body.autoCompetitors, // when no URLs given, auto-discover them (default on)
       location: body.location,
     };
 
@@ -61,8 +62,14 @@ export async function POST(req: NextRequest) {
     // Every slot is independent, so the whole critic pass runs CONCURRENTLY —
     // 21 slots graded in parallel instead of one-after-another (cold latency
     // drops from ~85s toward the cost of a single slot's grade+fix).
+    // The real competitor posts (per platform) the critics compare against. Empty
+    // unless Bright Data is configured AND competitors were supplied, in which
+    // case every competitive pass below is a no-op and the engine runs as before.
+    const peers = plan.competitorPosts || [];
+
     const deep = body.deepReview !== false;
     let fixed = 0;
+    let copyImproved = 0; // slots a competitive comparison strengthened post-rubric
     await Promise.all(
       plan.days.flatMap((day) =>
         day.slots.map(async (slot) => {
@@ -86,6 +93,35 @@ export async function POST(req: NextRequest) {
             }
           }
           slot.grade = { pass: failures.length === 0, failures };
+
+          // COMPETITIVE pass: once the copy is rubric-clean, compare it to the
+          // real high-engagement peer posts for this platform. If a peer would
+          // out-perform ours, do ONE suggestion-guided improvement rewrite — kept
+          // only if it STILL passes the full rubric, so a competitive tweak can
+          // never regress the all-green guarantee.
+          if (peers.length) {
+            const cmp = await compareCopyToCompetitors(slot, day.cta, peers, apiKey);
+            slot.competitive = cmp;
+            if (slot.grade.pass && !cmp.competitive && cmp.suggestions.length) {
+              try {
+                const improved = await fixSlotCopy(
+                  slot,
+                  ["strengthen against high-performing competitor posts"],
+                  apiKey,
+                  cmp.suggestions,
+                );
+                const cand = { ...slot, copy: improved };
+                const cdet = gradeSlot(cand);
+                const cllm = deep ? await gradeSlotLLM(cand, day.cta, apiKey, grounding) : [];
+                if (cdet.pass && cllm.length === 0) {
+                  slot.copy = improved;
+                  copyImproved++;
+                }
+              } catch {
+                /* keep the rubric-passing copy */
+              }
+            }
+          }
         }),
       ),
     );
@@ -95,7 +131,7 @@ export async function POST(req: NextRequest) {
     // let the visual critic grade it, and self-correct a failing render via
     // fixRender. Only STILLS are rendered here (cheap, and the correct frame to
     // critique), so this never touches the fal video spend ceiling.
-    let mediaTotal = 0, mediaPassing = 0;
+    let mediaTotal = 0, mediaPassing = 0, mediaImproved = 0;
     if (body.renderMedia) {
       const mediaSlots = plan.days.flatMap((day) =>
         day.slots.filter((s) => s.contentType !== "text" && s.mediaPrompt?.trim()));
@@ -111,6 +147,35 @@ export async function POST(req: NextRequest) {
             });
             slot.mediaUrl = fix.imageUrl;   // the graded still (keyframe for video slots)
             slot.visualGrade = fix.verdict;
+
+            // COMPETITIVE visual pass: once the render is quality-clean, compare it
+            // to the real peer posts for this platform. If a peer would win the
+            // scroll, do ONE suggestion-guided competitive re-render — kept only if
+            // it still passes the visual rubric, so it can never ship something worse.
+            if (peers.length && fix.verdict.pass) {
+              const cmp = await compareVisualToCompetitors({
+                imageUrl: fix.imageUrl, intent: slot.mediaPrompt!, platform: slot.platform,
+                peers, brandColors: plan.brand.colors, apiKey,
+              });
+              slot.visualCompetitive = cmp;
+              if (!cmp.competitive && cmp.suggestions.length) {
+                const reprompt = competitiveRenderPrompt(
+                  fix.prompt, fix.attempts, cmp.suggestions, plan.brand.colors, !fix.verdict.onBrand,
+                );
+                const reUrl = await generateImage(reprompt);
+                const reVerdict = await critiqueVisual({
+                  imageUrl: reUrl, intent: slot.mediaPrompt!, brandColors: plan.brand.colors, apiKey,
+                });
+                // Keep the competitive re-render ONLY on a genuine pass — never on
+                // critiqueVisual's fail-open "review skipped" sentinel, which would
+                // otherwise swap an unverified render over the verified-good one.
+                if (reVerdict.pass && !wasReviewSkipped(reVerdict)) {
+                  slot.mediaUrl = reUrl;
+                  slot.visualGrade = reVerdict;
+                  mediaImproved++;
+                }
+              }
+            }
           } catch {
             /* a render/critic infra failure leaves the slot ungraded, never crashes the week */
           }
@@ -126,9 +191,26 @@ export async function POST(req: NextRequest) {
     // Copy scorecard is unchanged (frontend-safe); media counts are added only
     // when the visual pass ran. A week is fully green when passing===total AND
     // mediaPassing===mediaTotal.
-    const scorecard = body.renderMedia
-      ? { total, passing, fixed, mediaTotal, mediaPassing }
-      : { total, passing, fixed };
+    const scorecard: Record<string, number> = { total, passing, fixed };
+    if (body.renderMedia) { scorecard.mediaTotal = mediaTotal; scorecard.mediaPassing = mediaPassing; }
+    // Competitive tallies are additive and only present when we actually had peer
+    // posts to benchmark against (Bright Data + competitors). copyChecked/
+    // copyCompetitive = how many slots we compared and how many already held up;
+    // copyImproved/mediaImproved = how many a competitive rewrite/re-render lifted.
+    if (peers.length) {
+      const slots = plan.days.flatMap((d) => d.slots);
+      const checked = slots.filter((s) => (s.competitive?.comparedTo ?? 0) > 0);
+      scorecard.competitorPosts = peers.length;
+      scorecard.copyChecked = checked.length;
+      scorecard.copyCompetitive = checked.filter((s) => s.competitive!.competitive).length;
+      scorecard.copyImproved = copyImproved;
+      if (body.renderMedia) {
+        const vChecked = slots.filter((s) => (s.visualCompetitive?.comparedTo ?? 0) > 0);
+        scorecard.mediaChecked = vChecked.length;
+        scorecard.mediaCompetitive = vChecked.filter((s) => s.visualCompetitive!.competitive).length;
+        scorecard.mediaImproved = mediaImproved;
+      }
+    }
 
     return NextResponse.json({ plan, scorecard });
   } catch (e: any) {

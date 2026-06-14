@@ -6,8 +6,9 @@
 // Run:  npx tsx --test lib/visual-critic.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseVisualVerdict, gradeRender, improveRenderPrompt, pickBestRender, fixRender } from "./visual-critic";
+import { parseVisualVerdict, gradeRender, improveRenderPrompt, pickBestRender, fixRender, buildVisualComparePrompt, competitiveRenderPrompt, wasReviewSkipped, compareVisualToCompetitors } from "./visual-critic";
 import type { VisualVerdict, RenderAttempt } from "./visual-critic";
+import type { CompetitorPost } from "./bright-data";
 
 // A reply is just the JSON the vision model is told to return.
 const reply = (o: Record<string, unknown>) => JSON.stringify(o);
@@ -140,6 +141,92 @@ test("improveRenderPrompt never emits an empty correction (defensive fallback)",
   const p = improveRenderPrompt("a beach", V({ matchesIntent: true, clean: true, onBrand: true, issues: [] }), 1);
   assert.ok(p.includes("a beach"));
   assert.ok(/clean, on-intent/i.test(p));
+});
+
+// ── COMPETITIVE VISUAL COMPARISON (Bright Data critic) ───────────────────────
+// competitiveRenderPrompt (PURE) — strengthens a PASSING render against peers,
+// framed as "already passed", NOT as "previous render failed" (improveRenderPrompt).
+test("competitiveRenderPrompt keeps the subject, folds suggestions, and is NOT failure-framed", () => {
+  const p = competitiveRenderPrompt("sunrise over a clean beach", 2, ["faces front and center", "brighter outdoor light"]);
+  assert.ok(p.includes("sunrise over a clean beach"), "preserves the original subject");
+  assert.ok(p.includes("faces front and center") && p.includes("brighter outdoor light"), "weaves in competitive direction");
+  assert.ok(/out-perform/i.test(p) && /already passed/i.test(p), "framed as strengthening a passing render");
+  assert.ok(!/the previous render failed/i.test(p), "does NOT borrow improveRenderPrompt's failure framing");
+});
+
+test("competitiveRenderPrompt is distinct per attempt (busts the fal prompt cache)", () => {
+  const a = competitiveRenderPrompt("a beach", 1, ["x"]);
+  const b = competitiveRenderPrompt("a beach", 2, ["x"]);
+  assert.notEqual(a, b);
+  assert.ok(a.includes("Revision 1") && b.includes("Revision 2"));
+});
+
+test("competitiveRenderPrompt weaves the palette only when off-brand, and never emits an empty direction", () => {
+  const off = competitiveRenderPrompt("a beach", 1, ["punchier light"], ["#0af", "#fc0"], true);
+  assert.ok(off.includes("#0af") && off.includes("#fc0"), "off-brand → palette woven in");
+  const on = competitiveRenderPrompt("a beach", 1, ["punchier light"], ["#0af"], false);
+  assert.ok(!on.includes("#0af"), "on-brand → no palette nag");
+  const noSuggestions = competitiveRenderPrompt("a beach", 1, []);
+  assert.ok(/stops the scroll/i.test(noSuggestions), "empty suggestions still yields a concrete direction");
+});
+
+// wasReviewSkipped — the fail-open sentinel guard the competitive re-render uses.
+test("wasReviewSkipped distinguishes a fail-open skip from a real verdict", () => {
+  assert.equal(wasReviewSkipped(V({ notes: "review skipped: image fetch 500" })), true);
+  assert.equal(wasReviewSkipped(V({ notes: "great composition" })), false);
+  assert.equal(wasReviewSkipped(V({ notes: "" })), false);
+});
+
+const vPeer = (over: Partial<CompetitorPost> = {}): CompetitorPost => ({
+  platform: "instagram", url: "u", text: "real people mid-cleanup, bright morning",
+  likes: 40, comments: 5, shares: 0, author: "peer", ...over,
+});
+
+// compareVisualToCompetitors (wrapper) — offline skip/error guards (invariant #1).
+// askVisionImpl is injected so NOTHING here touches the network or a vision model.
+test("compareVisualToCompetitors skips (no re-render) with no same-platform peers", async () => {
+  const v = await compareVisualToCompetitors({ imageUrl: "https://img/x.png", intent: "i", platform: "x", peers: [vPeer({ platform: "instagram" })], askVisionImpl: async () => { throw new Error("should not be called"); } });
+  assert.deepEqual(v, { competitive: true, suggestions: [], notes: "", comparedTo: 0 });
+});
+
+test("compareVisualToCompetitors skips when the render URL is unfetchable", async () => {
+  const v = await compareVisualToCompetitors({ imageUrl: "", intent: "i", peers: [vPeer()], askVisionImpl: async () => { throw new Error("should not be called"); } });
+  assert.equal(v.comparedTo, 0);
+  assert.equal(v.competitive, true);
+});
+
+test("compareVisualToCompetitors degrades a vision error to a skipped verdict (never throws)", async () => {
+  const v = await compareVisualToCompetitors({ imageUrl: "https://img/x.png", intent: "i", peers: [vPeer()], askVisionImpl: async () => { throw new Error("vision 503"); } });
+  assert.equal(v.comparedTo, 0);
+  assert.deepEqual(v.suggestions, []);
+});
+
+test("compareVisualToCompetitors parses a real verdict on the happy path", async () => {
+  const v = await compareVisualToCompetitors({ imageUrl: "https://img/x.png", intent: "i", peers: [vPeer(), vPeer()], askVisionImpl: async () => '{"competitive": false, "suggestions": ["bigger faces"], "notes": "weak"}' });
+  assert.equal(v.competitive, false);
+  assert.deepEqual(v.suggestions, ["bigger faces"]);
+  assert.equal(v.comparedTo, 2);
+});
+
+test("buildVisualComparePrompt ranks peers by engagement and states the intent", () => {
+  const { system, user } = buildVisualComparePrompt(
+    "volunteers filling trash bags at sunrise",
+    [vPeer({ text: "low post", likes: 1 }), vPeer({ text: "viral post", likes: 900 })],
+    ["#F97316"],
+  );
+  assert.ok(/art director/i.test(system));
+  assert.ok(user.includes("volunteers filling trash bags at sunrise"), "states our image's intent");
+  assert.ok(user.includes("#F97316"), "includes the brand palette when known");
+  assert.ok(user.indexOf("viral post") < user.indexOf("low post"), "ranked by engagement");
+  assert.ok(/ONLY JSON/i.test(user));
+});
+
+test("buildVisualComparePrompt names our image vs competitors only when refs are attached", () => {
+  const noRefs = buildVisualComparePrompt("our beach", [vPeer()], [], 0);
+  assert.ok(!/FIRST attached image is OUR render/i.test(noRefs.user), "no image-to-image framing without refs");
+  const withRefs = buildVisualComparePrompt("our beach", [vPeer()], [], 2);
+  assert.ok(/FIRST attached image is OUR render/i.test(withRefs.user), "names ours when competitor images are attached");
+  assert.ok(withRefs.user.includes("next 2 image"), "states how many competitor images follow");
 });
 
 // pickBestRender (PURE) — "best passing render, or the last attempt".

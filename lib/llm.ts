@@ -26,23 +26,43 @@ export async function ask(opts: {
   return msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
 }
 
+// Fetch one image into an Anthropic base64 image block. Returns null on any
+// failure (bad status, network, decode) so OPTIONAL reference images never sink a
+// vision call — a competitor CDN URL that 404s/expired is simply skipped.
+async function imageBlock(url: string): Promise<any | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const media_type = (r.headers.get("content-type") || "image/jpeg").split(";")[0];
+    const data = Buffer.from(await r.arrayBuffer()).toString("base64");
+    return { type: "image", source: { type: "base64", media_type: media_type as any, data } };
+  } catch {
+    return null;
+  }
+}
+
 // Multimodal: show Opus an actual rendered image and get a verdict. Used by the
 // visual critic so the review step grades the VISUALS, not just the copy.
+// `refImages` (optional) are additional reference images shown AFTER the main one
+// — the competitive visual critic passes the real competitor posts' images so the
+// model compares ours against theirs directly. The MAIN image is required (a fetch
+// failure throws, which critiqueVisual turns into a skip); reference images are
+// best-effort and silently dropped if they don't load.
 export async function askVision(opts: {
-  imageUrl: string; system?: string; user: string; maxTokens?: number; apiKey?: string;
+  imageUrl: string; refImages?: string[]; system?: string; user: string; maxTokens?: number; apiKey?: string;
 }): Promise<string> {
-  const r = await fetch(opts.imageUrl);
-  if (!r.ok) throw new Error(`image fetch ${r.status}`);
-  const media_type = (r.headers.get("content-type") || "image/jpeg").split(";")[0];
-  const data = Buffer.from(await r.arrayBuffer()).toString("base64");
+  const main = await imageBlock(opts.imageUrl);
+  if (!main) throw new Error(`image fetch failed: ${opts.imageUrl.slice(0, 60)}`);
+  const refs: any[] = [];
+  for (const u of (opts.refImages || []).slice(0, 3)) {
+    const b = await imageBlock(u);
+    if (b) refs.push(b);
+  }
   const msg = await claude(opts.apiKey).messages.create({
     model: MODEL,
     max_tokens: opts.maxTokens ?? 300,
     ...(opts.system ? { system: opts.system } : {}),
-    messages: [{ role: "user", content: [
-      { type: "image", source: { type: "base64", media_type: media_type as any, data } },
-      { type: "text", text: opts.user },
-    ] }],
+    messages: [{ role: "user", content: [main, ...refs, { type: "text", text: opts.user }] }],
   });
   return msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
 }
