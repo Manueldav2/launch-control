@@ -8,11 +8,10 @@ const nextConfig = {
   // The motion-video engine shells out to the ffmpeg-static binary and reads the
   // bundled font; make sure both get traced into the serverless function bundle.
   outputFileTracingIncludes: {
-    "/api/generate-media": [
-      "node_modules/ffmpeg-static/**",
-      "node_modules/@napi-rs/**",
-      "assets/fonts/**",
-    ],
+    // Every route that can render motion video needs the ffmpeg binary, the
+    // canvas native binding, and the font in its function bundle.
+    "/api/generate-media": ["node_modules/ffmpeg-static/**", "node_modules/@napi-rs/**", "assets/fonts/**"],
+    "/api/render-week": ["node_modules/ffmpeg-static/**", "node_modules/@napi-rs/**", "assets/fonts/**"],
   },
 };
 export default nextConfig;
