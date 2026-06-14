@@ -64,6 +64,8 @@ export async function createLumaEvent(input: CreateLumaInput): Promise<CreateLum
     name: input.name,
     start_at: input.startAt,
     timezone: input.timezone,
+    visibility: "public",            // publish it live (not a draft), anyone can find + RSVP
+    require_rsvp_approval: false,
   };
   if (input.endAt) base.end_at = input.endAt;
   if (input.descriptionMd) base.description_md = input.descriptionMd;

@@ -83,12 +83,15 @@ export default function Home() {
 
   // For an event-mode launch with Luma connected, spin up the real event page.
   async function createLumaEvent(p: Plan, weekday: string) {
-    if (!getLumaKey() || !isEventLocation(location)) return;
+    // Fire for any in-person event. Use the user's pasted key if they connected
+    // one, else the server's LUMA_API_KEY creates it (no connect needed).
+    if (!isEventLocation(location)) return;
     setLumaCreating(true);
     try {
+      const lk = getLumaKey();
       const r = await fetch("/api/luma", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-luma-key": getLumaKey() },
+        headers: { "Content-Type": "application/json", ...(lk ? { "x-luma-key": lk } : {}) },
         body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, brand: p.brand }),
       });
       const d = await r.json();
@@ -121,7 +124,9 @@ export default function Home() {
     try {
       const r = await fetch("/api/generate-week", {
         method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()), ...keyHeaders() },
-        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, renderMedia: reviewMedia }),
+        // Fast first launch: skip the slow per-slot copy critic and don't inline-
+        // render media here (PublishBar renders all media in parallel after).
+        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, deepReview: false, renderMedia: false }),
       });
       const d = await r.json();
       // Cached briefs come back instantly with no auth; a novel brief 401s ->

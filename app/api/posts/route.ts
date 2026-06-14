@@ -7,6 +7,7 @@
 // lib/zernio.ts.
 import { NextRequest, NextResponse } from "next/server";
 import { resolveProfileId, listAccounts } from "@/lib/zernio";
+import { getCachedFresh, setCached } from "@/lib/demo-cache";
 
 const BASE = process.env.ZERNIO_BASE_URL || "https://zernio.com/api";
 const TO_ZERNIO: Record<string, string> = { x: "twitter", linkedin: "linkedin", instagram: "instagram", facebook: "facebook", tiktok: "tiktok" };
@@ -119,6 +120,16 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const platform = sp.get("platform") || "";
     let accountId = sp.get("accountId") || "";
+
+    // Cache the channel/posts response so channels + PFPs load instantly (no
+    // Zernio round-trip on every visit). ?fresh=1 forces a refresh.
+    const cacheKey = `posts:${sp.get("all") || ""}:${platform}:${accountId}`;
+    const done = async (payload: any) => { await setCached(cacheKey, payload); return NextResponse.json(payload); };
+    if (sp.get("fresh") !== "1") {
+      const hit = await getCachedFresh<any>(cacheKey, 3 * 60 * 1000);
+      if (hit) return NextResponse.json({ ...hit, cached: true });
+    }
+
     const profileId = await resolveProfileId();
 
     // Calendar mode: every connected account's published + scheduled posts,
@@ -138,7 +149,7 @@ export async function GET(req: NextRequest) {
         })
       );
       const posts = out.filter((p) => p.id).sort((x, y) => (x.date && y.date ? +new Date(x.date) - +new Date(y.date) : 0));
-      return NextResponse.json({ posts, profiles, connected: accounts.length > 0 });
+      return done({ posts, profiles, connected: accounts.length > 0 });
     }
 
     let match: any = null;
@@ -160,7 +171,7 @@ export async function GET(req: NextRequest) {
       .map((p) => normalize(p, platform || "x", accountId))
       .filter((p) => p.id && isOnAccount(p, acctUser))
       .sort((a, b) => (b.createdAt && a.createdAt ? +new Date(b.createdAt) - +new Date(a.createdAt) : 0));
-    return NextResponse.json({ posts, accountId, profileId, profile, connected: !!match });
+    return done({ posts, accountId, profileId, profile, connected: !!match });
   } catch (e: any) {
     // Degrade quietly — the UI falls back to the demo week.
     return NextResponse.json({ posts: [], error: String(e?.message || e) });
