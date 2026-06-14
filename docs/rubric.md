@@ -134,10 +134,16 @@ comparison ran.
   one competitor before the top-per-platform slice, so a single viral account can't
   dominate the benchmark — the critics compare against several rivals, not the loudest.
 - Each platform's Bright Data dataset accepts a different input shape (verified
-  live): **Instagram** is a profile dataset (a profile URL returns its posts — fast,
-  works out of the box); the default **X** dataset is a *posts* dataset that rejects
-  bare profile URLs (set `BRIGHT_DATA_X_MODE=discover` for a profile→posts crawl —
-  correct but slow); the default **LinkedIn** dataset is a *people* dataset that
-  rejects `/company/` pages (give it `/in/` URLs or a company dataset). Mode,
-  dataset id, and the poll ceiling are all env-configurable (see `.env.example`),
-  and a platform that yields nothing simply contributes nothing — never an error.
+  live), so each has a collection **mode** (`collect` | `discover`, where `discover`
+  = `type=discover_new&discover_by=profile_url` crawls a profile's posts). **Instagram**
+  is a profile dataset → `collect` (fast, default). The default **X** dataset is a
+  *posts* dataset that rejects bare profile URLs, so it defaults to `discover` — which
+  is correct but takes minutes and usually exceeds the route budget (point
+  `BRIGHT_DATA_X_DATASET` at a profiles dataset for fast X data). The default
+  **LinkedIn** dataset is a *people* dataset that rejects `/company/` pages (give it
+  `/in/` URLs or a company dataset); it also defaults to `discover`.
+- A **per-source time cutoff** (`withTimeout`, `BRIGHT_DATA_MAX_POLL_MS`, default
+  120s) bounds every platform's scrape: a slow source (e.g. an X discover crawl)
+  resolves to `[]` so it never hangs a generation and the other platforms still come
+  through. Mode, dataset id, and the cutoff are all env-configurable (`.env.example`);
+  a platform that yields nothing simply contributes nothing — never an error.

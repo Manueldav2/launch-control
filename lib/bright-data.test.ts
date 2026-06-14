@@ -6,7 +6,7 @@
 // Run: npx tsx --test lib/bright-data.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractPosts, classifyPlatform, groupByPlatform, capPerAccount, type CompetitorPost } from "./bright-data";
+import { extractPosts, classifyPlatform, groupByPlatform, capPerAccount, collectionMode, withTimeout, type CompetitorPost } from "./bright-data";
 
 test("X: a top-level post record keeps text and maps engagement field names", () => {
   const posts = extractPosts("x", [
@@ -145,4 +145,39 @@ test("groupByPlatform routes classified URLs to their platform; unclassified go 
   assert.deepEqual(g.x, ["https://x.com/a", "https://example.com/d"]);
   assert.deepEqual(g.instagram, ["https://instagram.com/b", "https://example.com/d"]);
   assert.deepEqual(g.linkedin, ["https://linkedin.com/company/c", "https://example.com/d"]);
+});
+
+// ── collectionMode — discover is the default for X + LinkedIn, collect for IG ──
+test("collectionMode defaults: X=discover, Instagram=collect, LinkedIn=discover", () => {
+  for (const v of ["BRIGHT_DATA_X_MODE", "BRIGHT_DATA_IG_MODE", "BRIGHT_DATA_LI_MODE"]) delete process.env[v];
+  assert.equal(collectionMode("x"), "discover");
+  assert.equal(collectionMode("instagram"), "collect");
+  assert.equal(collectionMode("linkedin"), "discover");
+});
+
+test("collectionMode honors a valid env override and ignores junk", () => {
+  process.env.BRIGHT_DATA_X_MODE = "collect";
+  process.env.BRIGHT_DATA_IG_MODE = "discover";
+  process.env.BRIGHT_DATA_LI_MODE = "nonsense"; // invalid -> falls back to the default
+  try {
+    assert.equal(collectionMode("x"), "collect");
+    assert.equal(collectionMode("instagram"), "discover");
+    assert.equal(collectionMode("linkedin"), "discover");
+  } finally {
+    for (const v of ["BRIGHT_DATA_X_MODE", "BRIGHT_DATA_IG_MODE", "BRIGHT_DATA_LI_MODE"]) delete process.env[v];
+  }
+});
+
+// ── withTimeout — the per-source cutoff that drops a slow source ──────────────
+test("withTimeout returns the value when the promise settles in time", async () => {
+  assert.equal(await withTimeout(Promise.resolve("ok"), 1000, "fallback"), "ok");
+});
+
+test("withTimeout returns the fallback when the source is too slow", async () => {
+  const slow = new Promise<string>((res) => setTimeout(() => res("late"), 100));
+  assert.equal(await withTimeout(slow, 15, "fallback"), "fallback");
+});
+
+test("withTimeout maps a rejection to the fallback (a source error never throws)", async () => {
+  assert.deepEqual(await withTimeout(Promise.reject(new Error("boom")), 1000, [] as number[]), []);
 });

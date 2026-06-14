@@ -37,25 +37,44 @@ const DATASETS: Record<Platform, string> = {
 // posts. Verified live (2026):
 //   • collect  — the dataset takes the profile URL directly and returns its posts.
 //                The IG dataset is a PROFILE dataset, so this is fast and correct.
-//   • discover — type=discover_new&discover_by=profile_url. Required by a POSTS
-//                dataset (e.g. the default X one) because it REJECTS a bare profile
-//                URL (HTTP 400) and only crawls a profile's posts via discovery —
-//                correct but SLOW (minutes), so it's opt-in, not the default.
-// Env-overridable per platform (BRIGHT_DATA_<P>_MODE = collect|discover) so you can
-// flip a dataset's mode, or point BRIGHT_DATA_<P>_DATASET at a profile/company-
-// capable dataset, with no code change. Defaults stay fast: only enable `discover`
-// if you've raised BRIGHT_DATA_MAX_POLL_MS to tolerate the latency.
-// NOTE on the default datasets: the X dataset needs `discover` for profiles (slow);
-// the LinkedIn one is a PEOPLE dataset that rejects /company/ pages (it wants /in/
-// profiles). Instagram works out of the box. See docs/rubric.md + .env.example.
+//   • discover — type=discover_new&discover_by=profile_url. A POSTS dataset (e.g.
+//                the default X one) REJECTS a bare profile URL in collect (HTTP 400)
+//                and only crawls a profile's posts via discovery — correct but SLOW
+//                (minutes), so it's bounded by the per-source cutoff below.
+// `discover` is the DEFAULT for X and LinkedIn (their default datasets need it);
+// Instagram stays `collect` because its dataset is a profile dataset where collect
+// IS the profile->posts path (fast and proven). Override any platform with
+// BRIGHT_DATA_<X|IG|LI>_MODE = collect|discover, and/or point BRIGHT_DATA_<P>_DATASET
+// at a faster profile/company-capable dataset. NOTE: the default X dataset's discover
+// crawl exceeds the route budget, so X is usually dropped by the cutoff (and a crawl
+// is billed) — set X to a fast profiles dataset, or BRIGHT_DATA_X_MODE=collect with
+// post URLs, to avoid that. See docs/rubric.md + .env.example.
 type CollectMode = "collect" | "discover";
-const mode = (p: Platform): CollectMode =>
-  (process.env[`BRIGHT_DATA_${p === "x" ? "X" : p === "instagram" ? "IG" : "LI"}_MODE`] as CollectMode) || "collect";
+const DEFAULT_MODE: Record<Platform, CollectMode> = { x: "discover", instagram: "collect", linkedin: "discover" };
+const MODE_ENV: Record<Platform, string> = { x: "BRIGHT_DATA_X_MODE", instagram: "BRIGHT_DATA_IG_MODE", linkedin: "BRIGHT_DATA_LI_MODE" };
+export function collectionMode(p: Platform): CollectMode {
+  const v = (process.env[MODE_ENV[p]] || "").trim().toLowerCase();
+  return v === "collect" || v === "discover" ? v : DEFAULT_MODE[p];
+}
 
-// Poll ceiling (ms) for a snapshot to become ready. Bounded so a slow collection
-// times out gracefully instead of hanging a generation; raise it (env) if you turn
-// on `discover` mode, which legitimately takes minutes.
-const MAX_POLL_MS = Number(process.env.BRIGHT_DATA_MAX_POLL_MS) || 160000;
+// Per-SOURCE time cutoff (ms): the most a single platform's scrape may take before
+// it's dropped (-> []) so the OTHER platforms still come through and a slow
+// `discover` crawl can never hang a generation. Also the snapshot poll ceiling.
+// Kept modest so cold runs stay responsive; raise it (env) only if you want to wait
+// out discover-mode crawls (which take minutes — and may still exceed the route).
+const SOURCE_TIMEOUT_MS = Number(process.env.BRIGHT_DATA_MAX_POLL_MS) || 120000;
+
+// Resolve `p` to `fallback` if it doesn't settle within `ms` (a rejection also
+// yields `fallback`). Clears its timer so a fast source leaves no pending timeout.
+// Exported + offline so the per-source cutoff is unit-tested with no network.
+export function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const limit = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), ms); });
+  return Promise.race([
+    Promise.resolve(p).then((v) => { clearTimeout(timer); return v; }, () => { clearTimeout(timer); return fallback; }),
+    limit,
+  ]);
+}
 
 export interface CompetitorPost {
   platform: Platform;
@@ -273,7 +292,7 @@ async function trigger(datasetId: string, urls: string[], m: CollectMode): Promi
 // measured 6-94s); `discover` mode takes minutes. Times out rather than hang the
 // request; the caller treats a timeout as "no intel" and proceeds.
 async function awaitSnapshot(snapshotId: string, gapMs = 4000): Promise<void> {
-  const tries = Math.max(1, Math.ceil(MAX_POLL_MS / gapMs));
+  const tries = Math.max(1, Math.ceil(SOURCE_TIMEOUT_MS / gapMs));
   for (let i = 0; i < tries; i++) {
     const r = await fetch(`${API}/progress/${snapshotId}`, { headers: authHeaders() });
     if (r.ok) {
@@ -306,13 +325,16 @@ export async function scrapeCompetitorPosts(
   if (!brightDataEnabled() || !urls.length) return [];
   const datasetId = DATASETS[platform];
   if (!datasetId) return [];
-  const m = mode(platform);
+  const m = collectionMode(platform);
 
   const key = cacheKey(["bd-posts", platform, datasetId, m, urls, limit]);
   const cached = cacheGet<CompetitorPost[]>(key);
   if (cached) return cached;
 
-  try {
+  // The scrape, bounded by the per-source cutoff: a slow source (e.g. a discover
+  // crawl) resolves to [] so it never hangs a generation and the other platforms
+  // still come through. withTimeout also maps any thrown error (400, network) to [].
+  const work = (async () => {
     const snap = await trigger(datasetId, urls, m);
     await awaitSnapshot(snap);
     const posts = extractPosts(platform, await download(snap))
@@ -320,7 +342,6 @@ export async function scrapeCompetitorPosts(
       .slice(0, limit);
     cacheSet(key, posts);
     return posts;
-  } catch {
-    return []; // never break a generation run on a scrape failure
-  }
+  })();
+  return withTimeout(work, SOURCE_TIMEOUT_MS, [] as CompetitorPost[]);
 }
