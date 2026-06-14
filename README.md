@@ -78,3 +78,13 @@ app/          UI + API routes (generate-week, generate-media, connect, publish, 
 lib/          anthropic (brains + critic), fal (media), zernio (social), cache, types
 docs/         brief.md, rubric.md, architecture.md
 ```
+
+## Multi-agent coordination (a tool we brought, not built here)
+
+We ran this build with several Claude Code sessions working in parallel, coordinated
+by **Claude Classroom** — a multi-agent coordination skill we built **earlier, at
+home** (not during Build Day). It gives a shared board, file claims, negotiation,
+delegation, and a pre-commit guard so parallel sessions never clobber each other.
+We vendored it at [`.claude/skills/claude-classroom/`](.claude/skills/claude-classroom/)
+so the workflow is reproducible; see its [`USED_HERE.md`](.claude/skills/claude-classroom/USED_HERE.md)
+for provenance and how we used it here.
