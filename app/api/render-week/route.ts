@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     );
 
     let rendered = 0, failed = 0;
+    const errors: string[] = [];
     let idx = 0;
     const CONCURRENCY = Math.min(6, jobs.length);
     const worker = async () => {
@@ -48,12 +49,12 @@ export async function POST(req: NextRequest) {
           });
           plan.days[di].slots[si].mediaUrl = queued.publicUrl;
           rendered++;
-        } catch { failed++; }
+        } catch (e: any) { failed++; if (errors.length < 3) errors.push(String(e?.message || e).slice(0, 200)); }
       }
     };
     await Promise.all(Array.from({ length: Math.max(1, CONCURRENCY) }, worker));
 
-    return NextResponse.json({ plan, rendered, failed, total: jobs.length, spentUsd: spentSoFar() });
+    return NextResponse.json({ plan, rendered, failed, total: jobs.length, errors, spentUsd: spentSoFar() });
   } catch (e: any) {
     return NextResponse.json({ error: String(e?.message || e), spentUsd: spentSoFar() }, { status: 500 });
   }
