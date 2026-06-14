@@ -50,38 +50,26 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
   // Render every missing media slot IN PARALLEL (UGC + stills + motion at once),
   // not one-at-a-time. Returns the plan with media filled, or null if the free
   // limit was hit. A small concurrency cap keeps fal/Vercel happy.
+  // One batch call renders every missing media slot in parallel server-side and
+  // returns the plan with the media filled (UGC + stills + motion at once).
   async function renderAllParallel(): Promise<Plan | null> {
     setErr(""); setResult(null);
-    const items = unrendered;
-    if (!items.length) return plan;
-    let done = 0; setRendering({ done: 0, total: items.length });
-    const next: Plan = structuredClone(plan);
-    let stopped = false;
-    let idx = 0;
-    const CONCURRENCY = Math.min(6, items.length);
-    const worker = async () => {
-      while (idx < items.length && !stopped) {
-        const { di, si, s, day } = items[idx++];
-        try {
-          const r = await fetch("/api/generate-media", {
-            method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}), ...(await authHeader()), ...falHeader() },
-            body: JSON.stringify({
-              contentType: s.contentType, prompt: s.mediaPrompt || s.copy, intent: s.reaction,
-              brandColors: plan.brand?.colors, location: plan.inputs?.location,
-              org: plan.brand?.name || "demo", planId: plan.createdAt || "", slot: `${day.weekday}:${s.platform}`,
-              day: day.weekday, platform: s.platform, brand: plan.brand?.name, caption: (s.copy || "").slice(0, 120),
-            }),
-          });
-          const d = await r.json();
-          if (r.status === 402) { stopped = true; setErr(d.error || "Free media limit reached."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); return; }
-          if (d.url) { next.days[di].slots[si].mediaUrl = d.url; onPlanChange(structuredClone(next)); }
-        } catch { /* one render failing shouldn't stop the run */ }
-        setRendering((prev) => ({ done: ++done, total: items.length }));
-      }
-    };
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    setRendering(null);
-    return stopped ? null : next;
+    if (!unrendered.length) return plan;
+    setRendering({ done: 0, total: unrendered.length });
+    try {
+      const r = await fetch("/api/render-week", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}), ...(await authHeader()), ...falHeader() },
+        body: JSON.stringify({ plan }),
+      });
+      const d = await r.json();
+      setRendering(null);
+      if (r.status === 402) { setErr(d.error || "Free media limit reached."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); return null; }
+      if (!r.ok || !d.plan) { setErr(d.error || "media render failed"); return null; }
+      onPlanChange(d.plan);
+      return d.plan as Plan;
+    } catch (e: any) {
+      setRendering(null); setErr(String(e.message || e)); return null;
+    }
   }
 
   async function pushWeek(mode: "now" | "schedule", planOverride?: Plan) {
@@ -144,7 +132,7 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
         {/* One click: render all media in parallel, then post to every channel. */}
         <button onClick={() => publishEverything("now")} disabled={busy || !anyConnected} style={btn(true, busy || !anyConnected)}>
-          {rendering ? `Rendering media ${rendering.done}/${rendering.total}...`
+          {rendering ? `Rendering all ${rendering.total} media...`
             : publishing === "now" ? "Publishing everywhere..."
             : `Publish everything${unrendered.length ? ` (renders ${unrendered.length} media first)` : ""}`}
         </button>
