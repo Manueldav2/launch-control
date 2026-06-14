@@ -2,10 +2,11 @@
 // website (name, mission, voice, REAL colors, logo) and synthesize the winning
 // content playbook for this CTA. The plan + media prompts consume both, so the
 // week is grounded in their brand and in what actually performs.
-import { ask, extractJson } from "./llm";
+import { ask, extractJson, MODEL } from "./llm";
 import { PLATFORMS } from "./types";
 import type { BrandContext } from "./types";
-import { scrapeCompetitorPosts, brightDataEnabled } from "./bright-data";
+import { scrapeCompetitorPosts, brightDataEnabled, groupByPlatform, classifyPlatform, capPerAccount, type CompetitorPost } from "./bright-data";
+import { cacheGet, cacheSet, cacheKey } from "./cache";
 
 const FETCH_HEADERS = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" };
 const HEX = /#([0-9a-fA-F]{6})\b/g;
@@ -136,28 +137,141 @@ export async function winningPatterns(goal: string, cta: string, apiKey?: string
   } catch { return ""; }
 }
 
-// Mine what high-engagement PEERS are actually doing for this kind of campaign,
-// distilled into a short brief the planner designs against. This is the real-data
-// complement to winningPatterns(): where that distills general instincts, this
-// grounds the advice in scraped competitor posts ranked by engagement.
+// Collect the raw, recent competitor posts across every platform, ranked by
+// engagement — the real material both the PLANNER (via competitorBrief, below)
+// and the CRITICS (lib/critic.ts + lib/visual-critic.ts, which compare our content
+// against these) consume. This performs the single Bright Data scrape per
+// generation: the returned CompetitorPost[] is reused IN MEMORY by competitorBrief
+// (which takes posts directly and never scrapes) and by plan.competitorPosts, so
+// there is exactly one scrape. (scrapeCompetitorPosts is also disk-cached per
+// platform+competitors+limit, so re-running the same inputs doesn't re-spend.)
 //
-// OPTIONAL and fully backward-compatible: with no Bright Data token (or no
-// competitors supplied, or a scrape failure) it returns "" and generation runs
-// exactly as before. We scrape every platform for every competitor concurrently,
-// take the top-engagement posts, and let Claude extract the CTA + hook patterns
-// the winners share — strictly from the posts, no fabricated stats.
-export async function competitorIntel(
-  goal: string,
+// OPTIONAL and backward-compatible: with no Bright Data token, no competitors, or
+// a scrape that returns nothing, it returns [] and every consumer no-ops.
+export async function collectCompetitorPosts(
   competitors: string[],
+  perPlatform = 6,
+  perAccount = 3,
+): Promise<CompetitorPost[]> {
+  if (!brightDataEnabled() || !competitors?.length) return [];
+  // Route each URL to its OWN platform dataset (groupByPlatform) instead of sending
+  // every URL to all three — fetch the top 15 per platform (the brief reads all of
+  // them). Then cap to `perAccount` posts per competitor BEFORE taking the top
+  // `perPlatform`, so one viral account can't dominate the corpus and the critics
+  // benchmark against several competitors, not just the loudest.
+  const grouped = groupByPlatform(competitors);
+  const batches = await Promise.all(
+    PLATFORMS.map((p) => scrapeCompetitorPosts(p, grouped[p], 15)),
+  );
+  return batches.flatMap((b) => capPerAccount(b, perAccount).slice(0, perPlatform));
+}
+
+// PURE, offline — pull the competitor profile URLs out of the discovery model's
+// JSON reply, keeping only well-formed URLs that resolve to a platform we actually
+// scrape (classifyPlatform) and de-duping. A reply with no JSON, or junk fields,
+// yields [] — so a bad discovery pass simply means "no competitors", never a crash
+// or a garbage URL fed to the scraper. Exported so the parse is unit-tested with
+// no API key, like parseCompetitiveVerdict.
+export function extractCompetitorUrls(raw: string, max = 12): string[] {
+  let j: any;
+  try { j = extractJson(raw); } catch { return []; }
+  const orgs = Array.isArray(j?.competitors) ? j.competitors : [];
+  const urls: string[] = [];
+  for (const c of orgs) {
+    for (const k of ["x", "instagram", "linkedin"]) {
+      const u = c?.[k];
+      if (typeof u === "string" && u.trim() && classifyPlatform(u)) urls.push(u.trim());
+    }
+  }
+  return [...new Set(urls)].slice(0, max);
+}
+
+// Automatically RESEARCH the competition: ask Claude to name real, well-known peer
+// organizations active in this campaign's space and return their public X /
+// Instagram / LinkedIn profile URLs. This is what lets the competitive critics run
+// with NO hand-entered competitors — the discovered profiles flow straight into
+// collectCompetitorPosts → the critics.
+//
+// Discovery is grounded and conservative on purpose: the model is told to name
+// only organizations it is confident exist and to OMIT any handle it isn't sure of
+// (never guess). A wrong guess can't fabricate a FACT into our copy — the URL/author
+// never enter a generation prompt, and the critics only ever see posts that actually
+// came back from Bright Data. The bounded downside is benchmark QUALITY: a plausible
+// wrong handle that resolves to a real-but-unrelated account adds off-target posts to
+// the corpus (still capped, engagement-ranked, and distilled, so the effect is small).
+// Conservative omission keeps both the benchmark on-target and spend down. Disk-cached
+// per (goal, cta, website, model) so repeat runs are instant and free. Returns [] on error.
+export async function discoverCompetitors(
+  goal: string,
+  cta: string,
+  website: string,
+  apiKey?: string,
+): Promise<string[]> {
+  if (!goal?.trim() && !website?.trim()) return [];
+  const key = cacheKey(["discover-competitors", goal, cta, website, MODEL]);
+  const cached = cacheGet<string[]>(key);
+  if (cached) return cached;
+  try {
+    const out = await ask({
+      maxTokens: 700,
+      apiKey,
+      system:
+        "You identify REAL, well-known peer organizations a brand competes with for " +
+        "attention on social media. Name only organizations you are confident actually " +
+        "exist and are active, and give only social handles/URLs you are confident are " +
+        "correct. If you are unsure of a handle, omit that field — never guess or invent one.",
+      user:
+        "We are planning a social campaign and want to benchmark against the competition.\n" +
+        `Website: ${website}\nGoal: ${goal}\nCall to action: ${cta}\n\n` +
+        `Name up to 5 real, well-known peer/competitor organizations active in THIS space ` +
+        `(exclude the brand at ${website} itself). For each, give the canonical PUBLIC profile ` +
+        `URL on X, Instagram, and LinkedIn that you are confident exists.\n\n` +
+        "Return ONLY JSON:\n" +
+        '{"competitors":[{"name":"Org","x":"https://x.com/handle",' +
+        '"instagram":"https://instagram.com/handle","linkedin":"https://linkedin.com/company/slug"}]}\n' +
+        "Omit any field — or the whole org — you are not confident about. Prefer prominent " +
+        "organizations whose handles are well established. No prose, JSON only.",
+    });
+    const urls = extractCompetitorUrls(out);
+    cacheSet(key, urls);
+    return urls;
+  } catch {
+    return [];
+  }
+}
+
+// Resolve the competitor posts the critics benchmark against: use hand-entered
+// `competitors` when given, otherwise (when auto-discovery is on) RESEARCH them,
+// then scrape. Returns both the resolved URL list (for transparency on the plan)
+// and the scraped posts. A no-op returning empties when Bright Data is off, so the
+// engine behaves exactly as before with no key.
+export async function resolveCompetitorPosts(
+  opts: { goal: string; cta: string; website: string; competitors?: string[]; autoDiscover?: boolean },
+  apiKey?: string,
+): Promise<{ competitors: string[]; posts: CompetitorPost[] }> {
+  if (!brightDataEnabled()) return { competitors: [], posts: [] };
+  const supplied = (opts.competitors || []).map((u) => (u || "").trim()).filter(Boolean);
+  const competitors = supplied.length
+    ? supplied
+    : opts.autoDiscover === false
+      ? []
+      : await discoverCompetitors(opts.goal, opts.cta, opts.website, apiKey);
+  const posts = await collectCompetitorPosts(competitors);
+  return { competitors, posts };
+}
+
+// Distill scraped peer posts into a short brief the planner designs against. This
+// is the real-data complement to winningPatterns(): where that distills general
+// instincts, this grounds the advice in real competitor posts ranked by
+// engagement. Takes already-fetched posts (never scrapes) so collectCompetitorPosts
+// does the one scrape and the result is shared. Returns "" on no posts or any
+// error — the planner then runs exactly as before.
+export async function competitorBrief(
+  goal: string,
+  posts: CompetitorPost[],
   apiKey?: string,
 ): Promise<string> {
-  if (!brightDataEnabled() || !competitors?.length) return "";
-
-  const batches = await Promise.all(
-    PLATFORMS.map((p) => scrapeCompetitorPosts(p, competitors, 15)),
-  );
-  const top = batches
-    .flat()
+  const top = [...(posts || [])]
     .sort((a, b) => (b.likes + b.comments + b.shares) - (a.likes + a.comments + a.shares))
     .slice(0, 24);
   if (!top.length) return "";

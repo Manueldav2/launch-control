@@ -23,20 +23,45 @@ function scoreOf(p: any): Scorecard {
 
 // ─── types (mirror lib/types.ts) ────────────────────────────────────────────
 type VisualGrade = { pass: boolean; matchesIntent: boolean; onBrand: boolean; clean: boolean; issues: string[]; notes: string };
+type CompetitiveGrade = { competitive: boolean; suggestions: string[]; notes: string; comparedTo: number };
 type Slot = {
   platform: string; reaction: string; contentType: string; copy: string;
   mediaPrompt?: string; mediaUrl?: string; grade?: { pass: boolean; failures: string[] };
   visualGrade?: VisualGrade; // visual critic verdict for the rendered still (set when renderMedia ran)
+  competitive?: CompetitiveGrade; // copy benchmarked against real peer posts (Bright Data)
+  visualCompetitive?: CompetitiveGrade; // rendered media benchmarked against real peer posts
 };
 type Day = { day: number; weekday: string; cta: string; theme: string; isEventDay: boolean; weatherNote?: string; slots: Slot[] };
-type PlanInputs = { goal: string; cta: string; website: string; eventWeekday?: string; location?: string };
-type Plan = { brand: { name: string; voice: string; summary: string; colors: string[] }; days: Day[]; inputs?: PlanInputs; weather?: WeatherWatch | null; luma?: LumaEvent | null };
-type Scorecard = { total: number; passing: number; fixed: number; mediaPassing?: number; mediaTotal?: number };
+type PlanInputs = { goal: string; cta: string; website: string; eventWeekday?: string; location?: string; competitors?: string[] };
+type Plan = { brand: { name: string; voice: string; summary: string; colors: string[] }; days: Day[]; inputs?: PlanInputs; weather?: WeatherWatch | null; luma?: LumaEvent | null; competitors?: string[]; competitorPosts?: { platform: string; author: string }[] };
+type Scorecard = { total: number; passing: number; fixed: number; mediaPassing?: number; mediaTotal?: number; competitorPosts?: number; copyChecked?: number; copyCompetitive?: number; copyImproved?: number; mediaChecked?: number; mediaCompetitive?: number; mediaImproved?: number };
 
 // A launch is "go somewhere" when a real location is set (not NA / online).
 function isEventLocation(loc: string): boolean {
   const l = (loc || "").trim().toLowerCase();
   return !!l && !["na", "n/a", "none", "online"].includes(l);
+}
+
+// Competitor profile/post URLs to benchmark our content against (Bright Data).
+// Comma- or newline-separated; capped so a paste can't blow up the scrape cost.
+function parseCompetitors(s: string): string[] {
+  return (s || "").split(/[\n,]+/).map((u) => u.trim()).filter(Boolean).slice(0, 8);
+}
+
+// A short, human label for a competitor profile URL — "@handle" for X/Instagram,
+// the company slug for LinkedIn, else the bare host. Used to show WHO we
+// benchmarked against (whether hand-entered or auto-discovered).
+function rivalLabel(u: string): string {
+  try {
+    const url = new URL(/^https?:\/\//i.test(u) ? u : `https://${u}`);
+    const host = url.hostname.replace(/^www\./, "");
+    const seg = url.pathname.split("/").filter(Boolean);
+    if (/(^|\.)linkedin\.com$/.test(host)) return (seg[1] || seg[0] || host).replace(/-/g, " ");
+    if (/(^|\.)(x|twitter)\.com$/.test(host) || host === "instagram.com") return seg[0] ? `@${seg[0]}` : host;
+    return host;
+  } catch {
+    return u;
+  }
 }
 
 // ─── display maps ─────────────────────────────────────────────────────────────
@@ -63,6 +88,7 @@ export default function Home() {
   const [cta, setCta] = useState("");
   const [website, setWebsite] = useState("");
   const [location, setLocation] = useState("");
+  const [competitors, setCompetitors] = useState(""); // peer profile/post URLs to benchmark against
   const [goalFocused, setGoalFocused] = useState(false);
   const typed = useTypewriter(MISSION_PLACEHOLDERS, !goal && !goalFocused);
   const [loading, setLoading] = useState(false);
@@ -126,7 +152,8 @@ export default function Home() {
         method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()), ...keyHeaders() },
         // Fast first launch: skip the slow per-slot copy critic and don't inline-
         // render media here (PublishBar renders all media in parallel after).
-        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, deepReview: false, renderMedia: false }),
+        // competitors (or auto-discovery when blank) still drives the text critic.
+        body: JSON.stringify({ goal, cta, website, location, eventWeekday: weekday, deepReview: false, renderMedia: false, competitors: parseCompetitors(competitors) }),
       });
       const d = await r.json();
       // Cached briefs come back instantly with no auth; a novel brief 401s ->
@@ -191,7 +218,7 @@ export default function Home() {
       } catch {}
       sessionStorage.removeItem("lc:mission");
     };
-    const reset = () => { setPlan(null); setScorecard(null); setErr(""); setGoal(""); setCta(""); setWebsite(""); setLocation(""); };
+    const reset = () => { setPlan(null); setScorecard(null); setErr(""); setGoal(""); setCta(""); setWebsite(""); setLocation(""); setCompetitors(""); };
     const p = new URLSearchParams(window.location.search);
     if (p.get("demo") === "1" || window.location.hash === "#sample") { setPlan(SAMPLE_PLAN); setScorecard(SAMPLE_SCORE); }
     applyPending();
@@ -277,6 +304,9 @@ export default function Home() {
                 <GhostInput
                   icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M12 21s7-5.5 7-11a7 7 0 10-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>}
                   value={location} onChange={setLocation} placeholder="Location (NA if online)" />
+                <GhostInput
+                  icon={<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3"/><path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13A4 4 0 0119 7"/></svg>}
+                  value={competitors} onChange={setCompetitors} placeholder="Competitor URLs (optional — auto-discovered if blank)" />
               </div>
               {/* toolbar */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 10px" }}>
@@ -479,6 +509,26 @@ function ReadinessBoard({ plan, scorecard, onReset }:
               <span style={{ color: "var(--faint)" }}> · matches intent, clean, on-brand</span>
             </p>
           )}
+          {scorecard.competitorPosts != null && scorecard.competitorPosts > 0 && (() => {
+            // Prefer the resolved competitor URLs (always present, supplied or
+            // auto-found); fall back to post authors only if that list is empty.
+            const rivals = (plan.competitors?.length
+              ? plan.competitors.map(rivalLabel)
+              : Array.from(new Set((plan.competitorPosts || []).map((p) => p.author).filter(Boolean)))
+            ).slice(0, 4);
+            // Auto-discovered iff the user supplied no competitor URLs but we found some.
+            const autoFound = !(plan.inputs?.competitors?.length) && (plan.competitors?.length ?? 0) > 0;
+            return (
+              <p style={{ fontSize: 13.5, color: "var(--muted)", marginTop: 4 }}>
+                benchmarked against {scorecard.competitorPosts} real competitor posts
+                {rivals.length ? ` from ${rivals.join(", ")}` : ""} ·{" "}
+                {(scorecard.copyImproved || 0) + (scorecard.mediaImproved || 0) > 0
+                  ? `${(scorecard.copyImproved || 0) + (scorecard.mediaImproved || 0)} strengthened to beat the competition`
+                  : "every slot already holds up"}
+                <span style={{ color: "var(--faint)" }}>{autoFound ? " · auto-found via Bright Data" : " · via Bright Data"}</span>
+              </p>
+            );
+          })()}
         </div>
         <button onClick={onReset} style={{
           background: "var(--card)", border: "1px solid var(--border-strong)", color: "var(--text)",

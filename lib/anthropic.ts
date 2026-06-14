@@ -4,7 +4,7 @@
 import type { WeekInputs, WeekPlan, DayPlan, ContentSlot, BrandContext } from "./types";
 import { PLATFORMS, isEventMode } from "./types";
 import { claude, MODEL, extractJson } from "./llm";
-import { researchBrand, winningPatterns, competitorIntel } from "./research";
+import { researchBrand, winningPatterns, resolveCompetitorPosts, competitorBrief } from "./research";
 import { assessEventWeather } from "./weather";
 import { cacheGet, cacheSet, cacheKey } from "./cache";
 
@@ -85,30 +85,40 @@ Return ONLY JSON, no prose:
 }
 
 export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Promise<WeekPlan> {
-  // v5 = competitor intel (HEAD) + weather grounding (main) both in the plan, so
-  // the key is bumped to invalidate any cache entry that predates either field.
-  const key = cacheKey(["week", inputs, MODEL, "v5-competitors-grounded"]);
+  // v7 = competitor intel + the raw competitor POSTS the critics compare against +
+  // AUTO-DISCOVERED competitors (HEAD) + weather grounding (main) all in the plan,
+  // so the key is bumped to invalidate any cache entry that predates auto-discovery.
+  const key = cacheKey(["week", inputs, MODEL, "v7-auto-competitors"]);
   const cached = cacheGet<WeekPlan>(key);
   if (cached) return cached;
 
   const event = isEventMode(inputs);
-  // Research the brand, the general playbook, (optionally) real competitor intel,
-  // and (for in-person events) the forecast for the event day — all concurrently,
-  // since each feeds the plan independently. The competitor pass is a no-op
-  // returning "" unless Bright Data is configured AND inputs.competitors were
-  // supplied, so cost/latency stay opt-in.
-  const [brand, playbook, competitors, weather] = await Promise.all([
+  // Research the brand, the general playbook, the real competitor posts, and (for
+  // in-person events) the forecast for the event day — all concurrently, since each
+  // feeds the plan independently. resolveCompetitorPosts uses hand-entered
+  // competitors when given, otherwise AUTO-DISCOVERS them (lib/research.ts), then
+  // scrapes — a no-op returning empties unless Bright Data is configured. The brief
+  // is then distilled from those posts before the plan is written, and the raw
+  // posts + the resolved competitor list ride along on the plan for the critics.
+  const [brand, playbook, competitorResolved, weather] = await Promise.all([
     researchBrand(inputs.website, apiKey),
     winningPatterns(inputs.goal, inputs.cta, apiKey),
-    competitorIntel(inputs.goal, inputs.competitors || [], apiKey),
+    resolveCompetitorPosts(
+      { goal: inputs.goal, cta: inputs.cta, website: inputs.website, competitors: inputs.competitors, autoDiscover: inputs.autoCompetitors !== false },
+      apiKey,
+    ),
     event ? assessEventWeather(inputs.location!, inputs.eventWeekday || "Saturday") : Promise.resolve(null),
   ]);
+  const competitorPosts = competitorResolved.posts;
+  const brief = competitorPosts.length
+    ? await competitorBrief(inputs.goal, competitorPosts, apiKey)
+    : "";
 
   const msg = await claude(apiKey).messages.create({
     model: MODEL,
     max_tokens: 8000,
     system: SYSTEM,
-    messages: [{ role: "user", content: planPrompt(inputs, brand, playbook, competitors) }],
+    messages: [{ role: "user", content: planPrompt(inputs, brand, playbook, brief) }],
   });
   const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
   const data = extractJson(text);
@@ -117,7 +127,11 @@ export async function generateWeekPlan(inputs: WeekInputs, apiKey?: string): Pro
     inputs,
     brand,                       // the REAL researched brand (colors + logo + voice)
     playbook,
-    competitorIntel: competitors, // real peer CTA intel (empty unless Bright Data + competitors set)
+    competitorIntel: brief, // real peer CTA intel (empty unless Bright Data + competitors found)
+    competitors: competitorResolved.competitors, // the resolved peer URLs (supplied or auto-discovered)
+    // The raw peer posts the critics benchmark our content against (text capped to
+    // keep the cached/returned plan small). Empty unless Bright Data + competitors found.
+    competitorPosts: competitorPosts.map((p) => ({ ...p, text: p.text.slice(0, 280) })),
     weather,                     // forecast + recommendation for go-to-place events
     days: (data.days || []).map((d: DayPlan) => ({
       ...d,

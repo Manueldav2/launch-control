@@ -9,12 +9,16 @@ Give Launch Control a goal, a call to action, and a website. A crew of Claude (O
 ## The flow
 
 ```
-goal + CTA + website
+goal + CTA + website (competitors optional — auto-discovered if blank)
   → research the brand (lib/research.ts)
-  → plan the 7-day arc to the event        (Opus 4.8)
-  → draft per-channel copy                  (Opus 4.8)
-  → CRITIC grades each slot, rewrites misses (lib/critic.ts)
-  → VISUAL CRITIC grades rendered media      (lib/visual-critic.ts)
+  → AUTO-DISCOVER competitors                 (Opus 4.8, lib/research.ts)
+  → mine real competitor posts               (Bright Data, lib/bright-data.ts)
+  → plan the 7-day arc to the event          (Opus 4.8)
+  → draft per-channel copy                    (Opus 4.8)
+  → CRITIC grades each slot, rewrites misses  (lib/critic.ts)
+  → COMPETITIVE CRITIC: compare copy vs real peer posts, strengthen (lib/critic.ts)
+  → VISUAL CRITIC grades rendered media       (lib/visual-critic.ts)
+  → COMPETITIVE VISUAL CRITIC: compare render vs peers, re-render (lib/visual-critic.ts)
   → WeekPlan: every slot green + a scorecard
   → render stills / UGC / motion film        (fal.ai)
   → weather watch on the event day           (Open-Meteo, keyless)
@@ -26,7 +30,8 @@ goal + CTA + website
 
 | Service | What it does | Env key | Notes |
 |---|---|---|---|
-| **Claude (Opus 4.8)** | Research, the 7-day plan, per-channel copy, the text critic, and the visual critic | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | The brains. Required for a live run. Can also be pasted in-app (stored client-side, `lib/client-key.ts`). |
+| **Claude (Opus 4.8)** | Research, the 7-day plan, per-channel copy, the text critic, the visual critic, and the competitive critics (compare our copy + media against real peer posts) | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | The brains. Required for a live run. Can also be pasted in-app (stored client-side, `lib/client-key.ts`). |
+| **Bright Data** | Scrapes real competitor X / LinkedIn / Instagram posts (text + engagement + lead image). Competitors are **auto-discovered** by Opus when none are supplied (`discoverCompetitors`, `lib/research.ts`). Feeds the planner's competitor intel AND the text + visual critics, which compare our generated content against the competition and suggest improvements | `BRIGHT_DATA_API_KEY`, `BRIGHT_DATA_{X,IG,LI}_DATASET` | OPTIONAL. No key ⇒ the whole competitor signal (and auto-discovery) is skipped and the engine runs exactly as before. `lib/bright-data.ts`. |
 | **fal.ai** | Images (flux), UGC person-to-camera video, motion/launch film (veo 3.1) | `FAL_KEY`, `FAL_IMAGE_MODEL`, `FAL_VIDEO_MODEL` | Spend-guarded by `MAX_VIDEO_SPEND_USD`. Stills cheap, video metered. |
 | **Zernio** | Connect + publish/schedule to X, LinkedIn, Instagram, Facebook, TikTok | `ZERNIO_API_KEY`, `ZERNIO_BASE_URL` | Powers `/channels`, `/api/connect`, `/api/publish`, `/api/posts`, comment watch. |
 | **Weather (Open-Meteo)** | Forecasts the event day at the event location and decides: safe / needs a rain plan / move to a clearer day. Powers the weather-decision Gen UI. | **none — keyless** | Geocode + forecast via Open-Meteo. Returns null (no card) if it can't forecast; never fabricates. `lib/weather.ts`. |
@@ -57,8 +62,8 @@ goal + CTA + website
 ## Library map (`lib/`)
 
 Creation and review are split so they can be owned in parallel:
-- **Creation:** `anthropic.ts` (plan + copy), `research.ts`, `media-gen.ts` + `media-pipeline.ts` + `fal.ts` (media), `channels.ts` (distribution routing), `weather.ts`, `luma.ts`, `zernio.ts`.
-- **Review:** `critic.ts` (copy), `visual-critic.ts` (rendered media).
+- **Creation:** `anthropic.ts` (plan + copy), `research.ts`, `bright-data.ts` (competitor scraping), `media-gen.ts` + `media-pipeline.ts` + `fal.ts` (media), `channels.ts` (distribution routing), `weather.ts`, `luma.ts`, `zernio.ts`.
+- **Review:** `critic.ts` (copy rubric + competitive copy comparison), `visual-critic.ts` (rendered media + competitive visual comparison). Both critics compare our content against the real competitor posts `bright-data.ts` scraped and feed concrete improvements back into the self-correct loops.
 - **Plumbing:** `llm.ts` (shared Claude calls), `cache.ts` (disk cache for instant re-demos), `types.ts` (the WeekPlan contract), `store.ts` + `assets-store.ts` (server/browser persistence), `client-key.ts` + `client-luma.ts` (in-app key paste).
 
 ## Stack
