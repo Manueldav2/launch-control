@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createLumaEvent, verifyLumaKey } from "@/lib/luma";
 import { geocodePlace, nextDateFor } from "@/lib/weather";
 import { ask, extractJson } from "@/lib/llm";
+import { db } from "@/lib/store";
 
 export const maxDuration = 120;
 
@@ -17,8 +18,15 @@ function lumaKey(req: NextRequest, body?: any): string {
 
 export async function GET(req: NextRequest) {
   const key = lumaKey(req);
-  if (!key) return NextResponse.json({ connected: false });
-  return NextResponse.json({ connected: await verifyLumaKey(key) });
+  let events: any[] = [];
+  try {
+    const c = db();
+    if (c) {
+      const { data } = await c.from("luma_events").select("id, name, url, start_at, timezone, location").order("created_at", { ascending: false }).limit(50);
+      events = (data || []).map((e: any) => ({ id: e.id, name: e.name, url: e.url, startAt: e.start_at, timezone: e.timezone, location: e.location }));
+    }
+  } catch { /* best-effort */ }
+  return NextResponse.json({ connected: !!key, events });
 }
 
 export async function POST(req: NextRequest) {
@@ -84,6 +92,18 @@ export async function POST(req: NextRequest) {
       coordinate: geo ? { latitude: geo.lat, longitude: geo.lon } : undefined,
       coverUrl: typeof coverUrl === "string" && coverUrl.startsWith("http") ? coverUrl : undefined,
     });
+
+    // Persist so it shows up under "Your events" (Luma's own list API is scope-
+    // gated; our DB is the reliable source for the in-app events page).
+    try {
+      const c = db();
+      if (c && result.id) {
+        await c.from("luma_events").upsert(
+          { id: result.id, name, url: result.url, start_at: startAt, timezone, location, description, created_at: new Date().toISOString() },
+          { onConflict: "id" },
+        );
+      }
+    } catch { /* best-effort */ }
 
     return NextResponse.json({
       id: result.id, url: result.url, name, startAt, timezone, description,

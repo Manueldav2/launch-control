@@ -17,14 +17,23 @@ import { loadPlanLocal } from "../../calendar/plan-store";
 export default function LumaChannel() {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [connectOpen, setConnectOpen] = useState(false);
-  const [event, setEvent] = useState<LumaEvent | null>(null);
+  const [events, setEvents] = useState<LumaEvent[]>([]);
 
-  const refresh = () => {
-    setConnected(!!getLumaKey());
+  const refresh = async () => {
+    let evs: LumaEvent[] = [];
+    let conn = !!getLumaKey();
+    try {
+      const r = await fetch("/api/luma");
+      const d = await r.json();
+      conn = conn || !!d.connected; // server may hold the key
+      evs = Array.isArray(d.events) ? d.events : [];
+    } catch { /* fall back to the local plan */ }
     const p = loadPlanLocal() as unknown as { luma?: LumaEvent | null } | null;
-    setEvent(p?.luma || null);
+    if (p?.luma?.url && !evs.some((e) => e.url === p.luma!.url)) evs = [p.luma, ...evs];
+    setConnected(conn);
+    setEvents(evs);
   };
-  useEffect(refresh, []);
+  useEffect(() => { refresh(); }, []);
 
   const mode = connected === null ? "loading" : connected ? "connected" : "disconnected";
   const chip =
@@ -70,9 +79,13 @@ export default function LumaChannel() {
           </div>
         )}
 
-        {mode === "connected" && event && <LumaEventCard luma={event} creating={false} />}
+        {events.length > 0 && (
+          <div style={{ display: "grid", gap: 12 }}>
+            {events.map((e) => <LumaEventCard key={e.id || e.url} luma={e} creating={false} />)}
+          </div>
+        )}
 
-        {mode === "connected" && !event && (
+        {mode === "connected" && events.length === 0 && (
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "32px 24px", textAlign: "center" }}>
             <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: 16 }}>No events yet</div>
             <p style={{ color: "var(--muted)", fontSize: 13.5, margin: "8px auto 18px", maxWidth: 400, lineHeight: 1.5 }}>
