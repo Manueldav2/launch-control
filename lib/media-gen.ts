@@ -40,7 +40,17 @@ export async function renderMedia(i: RenderInput): Promise<{ url: string; stillU
     const url = await generateImage(branded);
     return { url, stillUrl: url };
   }
-  if (i.contentType === "ugc_video" || i.contentType === "motion_video") {
+  if (i.contentType === "motion_video") {
+    // Vibe motion = a programmatic kinetic-typography launch film (Opus
+    // storyboard + ffmpeg), NOT a generative clip. Deterministic, on-brand.
+    const { renderMotionVideo } = await import("./motion-video");
+    const { url, stillUrl } = await renderMotionVideo({
+      copy: i.prompt, intent: i.intent, brand: { colors: i.brandColors },
+    });
+    return { url, stillUrl };
+  }
+  if (i.contentType === "ugc_video") {
+    // Person-to-camera footage -> generative (fal image-to-video).
     const stillUrl = i.imageUrl || (await generateImage(branded));
     const url = await generateVideo(branded, stillUrl);
     return { url, stillUrl };

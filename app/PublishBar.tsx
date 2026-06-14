@@ -47,40 +47,37 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
     if (isMedia(s.contentType) && !s.mediaUrl) unrendered.push({ di, si, s, day });
   }));
 
-  async function renderAll() {
+  // Render every missing media slot IN PARALLEL (UGC + stills + motion at once),
+  // not one-at-a-time. Returns the plan with media filled, or null if the free
+  // limit was hit. A small concurrency cap keeps fal/Vercel happy.
+  // One batch call renders every missing media slot in parallel server-side and
+  // returns the plan with the media filled (UGC + stills + motion at once).
+  async function renderAllParallel(): Promise<Plan | null> {
     setErr(""); setResult(null);
-    const total = unrendered.length;
-    setRendering({ done: 0, total });
-    const next: Plan = structuredClone(plan);
-    for (let i = 0; i < unrendered.length; i++) {
-      const { di, si, s, day } = unrendered[i];
-      try {
-        const r = await fetch("/api/generate-media", {
-          method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}), ...(await authHeader()), ...falHeader() },
-          body: JSON.stringify({
-            contentType: s.contentType, prompt: s.mediaPrompt || s.copy, intent: s.reaction,
-            brandColors: plan.brand?.colors, location: plan.inputs?.location,
-            org: plan.brand?.name || "demo", planId: plan.createdAt || "", slot: `${day.weekday}:${s.platform}`,
-            day: day.weekday, platform: s.platform, brand: plan.brand?.name, caption: (s.copy || "").slice(0, 120),
-            review: true, // reviewer grades each render and auto-regenerates if it looks bad
-          }),
-        });
-        const d = await r.json();
-        // Free-tier limit hit: stop rendering, offer the own-key path (text/plan stay free).
-        if (r.status === 402) { setErr(d.error || "Free media limit reached."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); setRendering(null); return; }
-        if (d.url) { next.days[di].slots[si].mediaUrl = d.url; onPlanChange(structuredClone(next)); }
-      } catch { /* one render failing shouldn't stop the run */ }
-      setRendering({ done: i + 1, total });
+    if (!unrendered.length) return plan;
+    setRendering({ done: 0, total: unrendered.length });
+    try {
+      const r = await fetch("/api/render-week", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(keyHeader || {}), ...(await authHeader()), ...falHeader() },
+        body: JSON.stringify({ plan }),
+      });
+      const d = await r.json();
+      setRendering(null);
+      if (r.status === 402) { setErr(d.error || "Free media limit reached."); if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-fal-key")); return null; }
+      if (!r.ok || !d.plan) { setErr(d.error || "media render failed"); return null; }
+      onPlanChange(d.plan);
+      return d.plan as Plan;
+    } catch (e: any) {
+      setRendering(null); setErr(String(e.message || e)); return null;
     }
-    setRendering(null);
   }
 
-  async function pushWeek(mode: "now" | "schedule") {
+  async function pushWeek(mode: "now" | "schedule", planOverride?: Plan) {
     setErr(""); setPublishing(mode); setResult(null);
     try {
       const r = await fetch("/api/publish", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, mode }),
+        body: JSON.stringify({ plan: planOverride || plan, mode }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "publish failed");
@@ -88,6 +85,15 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
     } catch (e: any) { setErr(String(e.message || e)); }
     setPublishing(null);
   }
+
+  // One click: render all media (parallel), then publish everything across every
+  // connected platform. This is the "click OK and it all goes out" button.
+  async function publishEverything(mode: "now" | "schedule") {
+    const rendered = await renderAllParallel();
+    if (!rendered) return; // free limit hit (own-key prompt shown)
+    await pushWeek(mode, rendered);
+  }
+  const busy = !!rendering || !!publishing;
 
   const byChannel: Record<string, number> = {};
   if (result?.results) for (const r of result.results) if (r.ok) byChannel[r.channel] = (byChannel[r.channel] || 0) + 1;
@@ -124,22 +130,17 @@ export default function PublishBar({ plan, onPlanChange, keyHeader }: {
       </div>
 
       <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
-        {unrendered.length > 0 && (
-          <button onClick={renderAll} disabled={!!rendering} style={btn(false, !!rendering)}>
-            {rendering ? `Rendering ${rendering.done}/${rendering.total}...` : `Render ${unrendered.length} media`}
-          </button>
-        )}
-        <button onClick={() => pushWeek("schedule")} disabled={!!publishing || !anyConnected} style={btn(true, !!publishing || !anyConnected)}>
-          {publishing === "schedule" ? "Scheduling..." : "Schedule the week"}
+        {/* One click: render all media in parallel, then post to every channel. */}
+        <button onClick={() => publishEverything("now")} disabled={busy || !anyConnected} style={btn(true, busy || !anyConnected)}>
+          {rendering ? `Rendering all ${rendering.total} media...`
+            : publishing === "now" ? "Publishing everywhere..."
+            : `Publish everything${unrendered.length ? ` (renders ${unrendered.length} media first)` : ""}`}
         </button>
-        <button onClick={() => pushWeek("now")} disabled={!!publishing || !anyConnected} style={btn(false, !!publishing || !anyConnected)}>
-          {publishing === "now" ? "Publishing..." : "Publish now"}
+        <button onClick={() => publishEverything("schedule")} disabled={busy || !anyConnected} style={btn(false, busy || !anyConnected)}>
+          {publishing === "schedule" ? "Scheduling..." : "Schedule across the week"}
         </button>
         {!anyConnected && connected !== null && (
           <span style={{ fontSize: 12, color: "var(--muted)" }}>Connect a channel above to publish.</span>
-        )}
-        {unrendered.length > 0 && (
-          <span style={{ fontSize: 11.5, color: "var(--faint)" }}>Render media first so Instagram + TikTok get the video.</span>
         )}
         <button onClick={() => { if (typeof window !== "undefined") window.dispatchEvent(new Event("lc:open-keys")); }}
           style={{ background: "transparent", border: 0, color: "var(--clay-deep)", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: 0 }}>
