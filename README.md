@@ -79,12 +79,29 @@ lib/          anthropic (brains + critic), fal (media), zernio (social), cache, 
 docs/         brief.md, rubric.md, architecture.md
 ```
 
-## Multi-agent coordination (a tool we brought, not built here)
+## Multi-agent orchestration — how we built it this fast
 
-We ran this build with several Claude Code sessions working in parallel, coordinated
-by **Claude Classroom** — a multi-agent coordination skill we built **earlier, at
-home** (not during Build Day). It gives a shared board, file claims, negotiation,
-delegation, and a pre-commit guard so parallel sessions never clobber each other.
-We vendored it at [`.claude/skills/claude-classroom/`](.claude/skills/claude-classroom/)
-so the workflow is reproducible; see its [`USED_HERE.md`](.claude/skills/claude-classroom/USED_HERE.md)
-for provenance and how we used it here.
+We didn't build this with one agent working top to bottom. We ran a **crew of
+Claude Code sessions in parallel**, orchestrated by **Claude Classroom** — a
+coordination skill we built **earlier, at home** (not during Build Day) and *used*
+here. Instead of serial work, the sessions self-organized:
+
+- **Ownership + file claims.** Each session declared the area it operated, then
+  *claimed* files before editing. One session owned the entire **UI** (landing,
+  console, sidebar, liquid glass, the scroll story); others owned **backend/data**
+  (auth + quota, the Supabase store, channels, the comment watcher). Two agents
+  never touched the same code.
+- **A shared backlog.** Work was posted to a shared board and pulled by best fit,
+  so nothing was duplicated and the critical path stayed unblocked.
+- **A pre-commit guard.** The skill blocks committing a file another live session
+  holds, so "merge hell" became a non-event and every change landed clean on `main`.
+- **Continuous sync.** Every session broadcast what it shipped, so the crew kept a
+  live picture and could rebase instantly.
+
+The payoff: the marketing landing, the full console + Asset Bay + Calendar +
+Channels, the self-grading media pipeline, auth/quota, and every integration
+(Claude, fal.ai, Zernio, Supabase, Open-Meteo, Luma) came together **in parallel,
+in a single Build Day** — not one feature after another.
+
+Vendored at [`.claude/skills/claude-classroom/`](.claude/skills/claude-classroom/);
+see [`USED_HERE.md`](.claude/skills/claude-classroom/USED_HERE.md) for provenance.
